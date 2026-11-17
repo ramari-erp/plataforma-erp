@@ -7,9 +7,12 @@
 4. Repite con `supabase/migrations/0002_planta.sql`.
 5. Repite con `supabase/seed/0001_catalogo_planta.sql` (carga 67 materias primas y medicamentos,
    y 29 fórmulas con sus ingredientes, tomadas del archivo de costo de alimento jul–sep 2026).
-6. Revisa en **Table Editor** que existan las tablas `granjas`, `materias_primas`, `formulas`.
+6. Repite con `supabase/migrations/0003_capacidades_planta.sql` (capacidades de la planta por grupo de
+   materias primas: sorgo y maíz, soya, calcios, salvado/cáscara, ortofosfato). Va DESPUÉS del paso 5.
+7. Revisa en **Table Editor** que existan las tablas `granjas`, `materias_primas`, `formulas`.
 
-Siempre en ese orden. Si una ejecución marca error, no sigas con la siguiente: copia el mensaje y compártelo.
+Siempre en ese orden: 0001 → 0002 → seed → 0003.
+Si un archivo marca "already exists", ese archivo ya se había ejecutado: pasa al siguiente. Si una ejecución marca error, no sigas con la siguiente: copia el mensaje y compártelo.
 
 ## Qué queda cargado
 - Granjas: La Red, Durazno, Palenque, San Pablo, Rodadero, Ramari, Paraíso, Princesita, Josefino y La Mesa

@@ -25,7 +25,9 @@ Todo en español: tablas, columnas, interfaz y mensajes.
 
 ## Probar SQL localmente
 PostgreSQL 16 está disponible en el contenedor. `supabase/tests/supabase_stub.sql` simula `auth.users`,
-`auth.uid()` y el rol `authenticated`. Cargar stub + migraciones + seed y correr `supabase/tests/*.sql`.
+`auth.uid()` y el rol `authenticated`. `supabase/tests/cargar_todo.sh` carga todo en el orden de Supabase (0001, 0002, seed, 0003…); luego correr `supabase/tests/test_planta.sql`.
+Al agregar una migración, agregarla también a `cargar_todo.sh` y a `docs/instalar-base-de-datos.md`.
+Croquis y capacidades de la planta: `docs/planta/`.
 
 ## Plan
 Plan de acción del proyecto (fases 0–8, tareas, formatos): documento "Plan de acción — Plataforma ERP
