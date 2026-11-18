@@ -2,11 +2,13 @@
 import { api } from './api.js';
 import { esc, fmt, hoy, aviso, cargando, errorEn } from './ui.js';
 import { sesion } from './sesion.js';
+import { seccionInventario } from './inventario.js';
 
 const SECCIONES = [
   { codigo: 'resumen', nombre: 'Resumen' },
   { codigo: 'llegadas', nombre: 'Llegadas de materia prima' },
   { codigo: 'existencias', nombre: 'Existencias' },
+  { codigo: 'inventario', nombre: 'Inventario físico' },
 ];
 
 export function pantallaPlanta(cont, seccion = 'resumen') {
@@ -20,6 +22,7 @@ export function pantallaPlanta(cont, seccion = 'resumen') {
   const zona = cont.querySelector('#seccion');
   if (actual.codigo === 'resumen') return resumen(zona);
   if (actual.codigo === 'llegadas') return llegadas(zona);
+  if (actual.codigo === 'inventario') return seccionInventario(zona);
   return existencias(zona);
 }
 

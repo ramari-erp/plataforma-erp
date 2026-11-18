@@ -11,9 +11,11 @@
    materias primas: sorgo y maíz, soya, calcios, salvado/cáscara, ortofosfato). Va DESPUÉS del paso 5.
 7. Repite con `supabase/migrations/0004_pantallas_planta.sql` (historial de llegadas, alta de usuarios
    desde la plataforma y actualización en vivo).
-8. Revisa en **Table Editor** que existan las tablas `granjas`, `materias_primas`, `formulas`.
+8. Repite con `supabase/migrations/0005_inventario_fisico.sql` (inventario de arranque, conteo físico
+   semanal con ajustes, precios de referencia de septiembre).
+9. Revisa en **Table Editor** que existan las tablas `granjas`, `materias_primas`, `formulas`.
 
-Siempre en ese orden: 0001 → 0002 → seed → 0003 → 0004.
+Siempre en ese orden: 0001 → 0002 → seed → 0003 → 0004 → 0005.
 Si un archivo marca "already exists", ese archivo ya se había ejecutado: pasa al siguiente. Si una ejecución marca error, no sigas con la siguiente: copia el mensaje y compártelo.
 
 ## Qué queda cargado

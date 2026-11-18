@@ -141,3 +141,14 @@ tbody tr:last-child td { border-bottom: 0; }
 .aviso { padding: 10px 14px; border-radius: 8px; background: var(--acento); color: #fff; box-shadow: 0 4px 12px rgba(0, 0, 0, .15); }
 .aviso-error { background: var(--peligro); }
 @media (prefers-color-scheme: dark) { .aviso { color: #10261a; } .aviso-error { color: #2b0f0d; } }
+
+/* Captura en tabla (inventario físico) */
+.tabla-captura td { padding: 6px 12px; }
+.celda-num { width: 9.5em; text-align: right; padding: 6px 8px; }
+.fila-grupo td { background: var(--fondo); font-weight: 600; font-size: .8rem; color: var(--texto-suave); text-transform: uppercase; letter-spacing: .03em; }
+.dif-menos { color: var(--peligro); font-weight: 600; }
+.dif-mas { color: var(--alerta); font-weight: 600; }
+.resumen-captura { font-weight: 600; margin: 12px 0; font-variant-numeric: tabular-nums; }
+.desplegable { margin-top: 24px; }
+.desplegable summary { cursor: pointer; font-weight: 600; }
+.desplegable[open] summary { margin-bottom: 12px; }

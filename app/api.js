@@ -54,6 +54,22 @@ export const api = {
   async crearLlegada(datos) {
     return ok(await sb.from('llegadas_mp').insert(datos).select('id').single());
   },
+  async inventarioInicial() {
+    return ok(await sb.from('inventario_inicial').select('materia_prima_id,fecha,kg,costo_kg'));
+  },
+  // items: [{ materia_prima_id, kg, costo_kg }]
+  async guardarInventarioInicial(fecha, items) {
+    return ok(await sb.rpc('guardar_inventario_inicial', { p_fecha: fecha, p_items: items }));
+  },
+  // items: [{ materia_prima_id, kg_fisicos }] → devuelve [{ materia, kg_sistema, kg_fisicos, diferencia }]
+  async registrarConteo(fecha, items) {
+    return ok(await sb.rpc('registrar_conteo', { p_fecha: fecha, p_items: items }));
+  },
+  async conteos({ desde } = {}) {
+    let q = sb.from('v_conteos').select('*').order('fecha', { ascending: false }).order('materia_prima').limit(500);
+    if (desde) q = q.gte('fecha', desde);
+    return ok(await q);
+  },
 
   // Usuarios (solo administrador)
   async usuarios() { return ok(await sb.rpc('listar_usuarios')); },
