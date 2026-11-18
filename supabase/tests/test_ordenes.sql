@@ -55,3 +55,10 @@ select existencia_kg as sorgo_antes from v_existencias_mp where nombre = 'SORGO'
 delete from ordenes_produccion where id = 2;
 select existencia_kg as sorgo_despues from v_existencias_mp where nombre = 'SORGO';
 reset role;
+
+-- 0008: granja destino
+set role authenticated; set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000001';
+select guardar_orden('2026-11-23', (select f from ids), 12000, '[]', '[]', null, false, null, (select id from granjas where nombre = 'Rodadero')) as orden_rodadero;
+select id, formula, kg_producidos, granja from v_ordenes order by id;
+select * from v_produccion_granja order by fecha, granja;
+reset role;

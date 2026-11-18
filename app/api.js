@@ -30,6 +30,9 @@ export const api = {
 
   // Catálogos
   async modulos() { return ok(await sb.from('modulos').select('codigo,nombre,orden').order('orden')); },
+  async granjas() {
+    return ok(await sb.from('granjas').select('id,nombre,activa').order('nombre'));
+  },
   async materias() {
     return ok(await sb.from('materias_primas').select('id,nombre,categoria').eq('activa', true).order('nombre'));
   },
@@ -83,12 +86,15 @@ export const api = {
       p_fecha: o.fecha, p_formula_id: o.formulaId, p_kg: o.kg,
       p_ingredientes: o.ingredientes, p_extras: o.extras, p_notas: o.notas,
       p_actualizar_formula: !!o.actualizarFormula, p_orden_id: o.ordenId ?? null,
+      p_granja_id: o.granjaId ?? null,
     }));
   },
-  async ordenes({ desde, hasta } = {}) {
+  async ordenes({ desde, hasta, granja } = {}) {
     let q = sb.from('v_ordenes').select('*').order('fecha', { ascending: false }).order('id', { ascending: false }).limit(500);
     if (desde) q = q.gte('fecha', desde);
     if (hasta) q = q.lte('fecha', hasta);
+    if (granja === 'ninguna') q = q.is('granja_id', null);
+    else if (granja) q = q.eq('granja_id', granja);
     return ok(await q);
   },
   async consumosOrden(ordenId) {

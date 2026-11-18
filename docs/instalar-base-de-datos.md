@@ -17,9 +17,10 @@
    ajustable por orden y extras).
 10. Repite con `supabase/migrations/0007_contratos_granos.sql` (contratos de materia prima, corte con
     las llegadas y alertas de cobertura de sorgo, maíz y pasta de soya).
-11. Revisa en **Table Editor** que existan las tablas `granjas`, `materias_primas`, `formulas`.
+11. Repite con `supabase/migrations/0008_orden_granja_destino.sql` (granja destino en las órdenes).
+12. Revisa en **Table Editor** que existan las tablas `granjas`, `materias_primas`, `formulas`.
 
-Siempre en ese orden: 0001 → 0002 → seed → 0003 → 0004 → 0005 → 0006 → 0007.
+Siempre en ese orden: 0001 → 0002 → seed → 0003 → 0004 → 0005 → 0006 → 0007 → 0008.
 Si un archivo marca "already exists", ese archivo ya se había ejecutado: pasa al siguiente. Si una ejecución marca error, no sigas con la siguiente: copia el mensaje y compártelo.
 
 ## Qué queda cargado
@@ -30,3 +31,8 @@ Si un archivo marca "already exists", ese archivo ya se había ejecutado: pasa a
 ## Qué falta capturar (catálogos del plan de acción)
 Casetas, tolvas, bodegas y su capacidad, lote/banda actual en cada caseta, proveedores, clientes, camiones,
 equivalencias de nombres de fórmulas, y el inventario físico de arranque.
+
+## Antes del arranque real
+Si hiciste capturas de prueba, ejecuta `supabase/limpiar_datos_de_prueba.sql`: borra llegadas, órdenes, contratos,
+inventario de arranque, conteos y ajustes, y deja los catálogos (granjas, materias primas, fórmulas, proveedores,
+usuarios). No se puede deshacer. Si en las pruebas cambiaste alguna fórmula base, revísala.

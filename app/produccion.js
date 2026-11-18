@@ -16,6 +16,7 @@ export function seccionProduccion(zona) {
     <form class="filtros" id="filtros-ordenes">
       <label>Desde<input type="date" name="desde"></label>
       <label>Hasta<input type="date" name="hasta"></label>
+      <label>Granja destino<select name="granja"><option value="">Todas</option><option value="ninguna">Sin granja</option></select></label>
     </form>
     <div id="historial-ordenes"></div>`;
   const filtros = zona.querySelector('#filtros-ordenes');
@@ -27,11 +28,14 @@ export function seccionProduccion(zona) {
   if (puede) {
     (async () => {
       try {
-        const [formulas, exis] = await Promise.all([api.formulas(), api.existencias()]);
-        if (vivo) formularioOrden(zona.querySelector('#zona-orden'), formulas, exis, pintarHistorial);
+        const [formulas, exis, granjas] = await Promise.all([api.formulas(), api.existencias(), api.granjas()]);
+        if (vivo) formularioOrden(zona.querySelector('#zona-orden'), formulas, exis, granjas.filter((g) => g.activa), pintarHistorial);
       } catch (e) { errorEn(zona.querySelector('#zona-orden'), e); }
     })();
   }
+  api.granjas().then((gs) => {
+    filtros.granja.insertAdjacentHTML('beforeend', gs.map((g) => `<option value="${g.id}">${esc(g.nombre)}</option>`).join(''));
+  }).catch(() => {});
   filtros.addEventListener('change', pintarHistorial);
   cargando(hist);
   pintarHistorial();
@@ -41,7 +45,7 @@ export function seccionProduccion(zona) {
 
 // ---------- Formulario ----------
 
-function formularioOrden(zona, formulas, exis, alGuardar) {
+function formularioOrden(zona, formulas, exis, granjas, alGuardar) {
   const materias = new Map(exis.map((m) => [m.id, m]));
   const opcionesFormula = Object.entries(ESPECIES).map(([esp, nombre]) => {
     const lista = formulas.filter((f) => (f.especie || 'otro') === esp);
@@ -62,6 +66,7 @@ function formularioOrden(zona, formulas, exis, alGuardar) {
         <label>Fecha<input type="date" name="fecha" value="${hoy()}" required></label>
         <label class="ancho2">Fórmula<select name="formula" required><option value="">Elige…</option>${opcionesFormula}</select></label>
         <label>Toneladas producidas<input type="number" name="toneladas" min="0.001" step="0.001" inputmode="decimal" required></label>
+        <label class="ancho2">Granja destino<select name="granja"><option value="">Sin granja (queda en planta)</option>${granjas.map((g) => `<option value="${g.id}">${esc(g.nombre)}</option>`).join('')}</select></label>
       </div>
 
       <div id="bloque-ingredientes" class="oculto">
@@ -223,13 +228,15 @@ function formularioOrden(zona, formulas, exis, alGuardar) {
       await api.guardarOrden({
         fecha: form.fecha.value,
         formulaId: Number(form.formula.value),
+        granjaId: form.granja.value ? Number(form.granja.value) : null,
         kg: Math.round(t * 1000 * 100) / 100,
         ingredientes: ingredientes.map(({ materia_prima_id, kg_por_tonelada }) => ({ materia_prima_id, kg_por_tonelada })),
         extras: extras.filter((e) => e.materia_prima_id && e.cantidad),
         notas: form.notas.value.trim() || null,
         actualizarFormula: !!form.actualizar_base?.checked && !form.querySelector('#campo-base')?.classList.contains('oculto'),
       });
-      aviso(`Orden guardada: ${fmt.t(t * 1000)} de ${formula}.`);
+      const granja = form.granja.value ? ` para ${form.granja.selectedOptions[0].textContent}` : '';
+      aviso(`Orden guardada: ${fmt.t(t * 1000)} de ${formula}${granja}.`);
       // Existencias nuevas para la siguiente orden
       const nuevas = await api.existencias();
       nuevas.forEach((m) => materias.set(m.id, m));
@@ -251,7 +258,7 @@ function formularioOrden(zona, formulas, exis, alGuardar) {
 
 async function historial(zona, filtros, sigueVivo) {
   try {
-    const filas = await api.ordenes({ desde: filtros.desde.value, hasta: filtros.hasta.value });
+    const filas = await api.ordenes({ desde: filtros.desde.value, hasta: filtros.hasta.value, granja: filtros.granja.value || null });
     if (!sigueVivo()) return;
     if (!filas.length) { zona.innerHTML = '<p class="vacio">No hay órdenes en esas fechas.</p>'; return; }
     const kg = filas.reduce((s, o) => s + Number(o.kg_producidos), 0);
@@ -260,11 +267,12 @@ async function historial(zona, filtros, sigueVivo) {
     zona.innerHTML = `
       <p class="nota">${filas.length} órdenes · ${fmt.t(kg)} · costo de materia prima ${fmt.dinero(costo)} (${fmt.precio(kg ? costo / kg : 0)})</p>
       <div class="tabla-scroll"><table>
-        <thead><tr><th>Fecha</th><th>Fórmula</th><th class="num">Producido</th><th class="num">Costo/kg</th><th class="num">Costo MP</th><th>Cambios</th><th>Capturó</th><th></th></tr></thead>
+        <thead><tr><th>Fecha</th><th>Fórmula</th><th>Granja destino</th><th class="num">Producido</th><th class="num">Costo/kg</th><th class="num">Costo MP</th><th>Cambios</th><th>Capturó</th><th></th></tr></thead>
         <tbody>${filas.map((o) => `
           <tr data-orden="${o.id}">
             <td>${fmt.fecha(o.fecha)}</td>
             <td>${esc(o.formula)}${o.notas ? `<small>${esc(o.notas)}</small>` : ''}</td>
+            <td>${esc(o.granja || '—')}</td>
             <td class="num">${fmt.t(o.kg_producidos)}</td>
             <td class="num">${fmt.precio(o.costo_kg)}</td>
             <td class="num">${fmt.dinero(o.costo_mp)}</td>
@@ -283,7 +291,7 @@ async function historial(zona, filtros, sigueVivo) {
         const siguiente = tr.nextElementSibling;
         if (siguiente?.classList.contains('detalle')) { siguiente.remove(); ver.setAttribute('aria-expanded', 'false'); return; }
         ver.setAttribute('aria-expanded', 'true');
-        tr.insertAdjacentHTML('afterend', `<tr class="detalle"><td colspan="8"><p class="cargando">Cargando…</p></td></tr>`);
+        tr.insertAdjacentHTML('afterend', `<tr class="detalle"><td colspan="9"><p class="cargando">Cargando…</p></td></tr>`);
         const celda = tr.nextElementSibling.firstElementChild;
         try {
           const [consumos, extras] = await Promise.all([api.consumosOrden(ver.dataset.ver), api.extrasOrden(ver.dataset.ver)]);
