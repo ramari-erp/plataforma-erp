@@ -8,7 +8,11 @@ Todo en español: tablas, columnas, interfaz y mensajes.
 ## Stack
 - Supabase (PostgreSQL + Auth + Storage). Migraciones en `supabase/migrations/` numeradas; se ejecutan en orden
   en el SQL Editor de Supabase. Nunca editar una migración ya aplicada: crear una nueva.
-- Vercel para la página web (frontend aún no iniciado).
+- Vercel para la página web. Sin compilación ni paquetes npm (la cuenta no permite instalar paquetes):
+  `index.html` + módulos ES en `app/`; supabase-js se carga desde jsDelivr con versión fija en `app/api.js`.
+  `.vercelignore` deja fuera supabase/, docs/ y scripts/. Las pantallas solo hablan con la base vía `app/api.js`.
+- Probar la página: Playwright (preinstalado) sirviendo el repo con `page.route` y reemplazando `app/api.js`
+  por una versión falsa con datos de ejemplo.
 - Cuenta de la empresa: sistemas@ramarierp.com (GitHub `ramari-erp`).
 
 ## Reglas de diseño

@@ -9,9 +9,11 @@
    y 29 fórmulas con sus ingredientes, tomadas del archivo de costo de alimento jul–sep 2026).
 6. Repite con `supabase/migrations/0003_capacidades_planta.sql` (capacidades de la planta por grupo de
    materias primas: sorgo y maíz, soya, calcios, salvado/cáscara, ortofosfato). Va DESPUÉS del paso 5.
-7. Revisa en **Table Editor** que existan las tablas `granjas`, `materias_primas`, `formulas`.
+7. Repite con `supabase/migrations/0004_pantallas_planta.sql` (historial de llegadas, alta de usuarios
+   desde la plataforma y actualización en vivo).
+8. Revisa en **Table Editor** que existan las tablas `granjas`, `materias_primas`, `formulas`.
 
-Siempre en ese orden: 0001 → 0002 → seed → 0003.
+Siempre en ese orden: 0001 → 0002 → seed → 0003 → 0004.
 Si un archivo marca "already exists", ese archivo ya se había ejecutado: pasa al siguiente. Si una ejecución marca error, no sigas con la siguiente: copia el mensaje y compártelo.
 
 ## Qué queda cargado

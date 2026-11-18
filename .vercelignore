@@ -1,0 +1,6 @@
+# Vercel solo publica la página (index.html y app/). Lo demás se queda en GitHub.
+supabase
+docs
+scripts
+CLAUDE.md
+README.md

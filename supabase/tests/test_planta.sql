@@ -1,5 +1,5 @@
 \set ON_ERROR_STOP 1
-insert into auth.users values ('00000000-0000-0000-0000-000000000001'), ('00000000-0000-0000-0000-000000000002');
+insert into auth.users values ('00000000-0000-0000-0000-000000000001', 'captura@ramarierp.com'), ('00000000-0000-0000-0000-000000000002', 'director@ramarierp.com'), ('00000000-0000-0000-0000-000000000003', 'admin@ramarierp.com');
 insert into perfiles values ('00000000-0000-0000-0000-000000000001', 'Capturista planta', 'capturista', true),
                             ('00000000-0000-0000-0000-000000000002', 'Director', 'director', true);
 insert into perfil_modulos values ('00000000-0000-0000-0000-000000000001', 'planta');
@@ -37,4 +37,19 @@ set role authenticated; set request.jwt.claim.sub = '00000000-0000-0000-0000-000
 \set ON_ERROR_STOP 0
 insert into llegadas_mp (fecha, materia_prima_id, kg_neto, precio_kg) values ('2026-11-06', 1, 10, 1);
 select count(*) as llegadas_visibles_director from llegadas_mp;
+reset role;
+
+-- 0004: historial, usuarios
+\set ON_ERROR_STOP 1
+insert into perfiles values ('00000000-0000-0000-0000-000000000003', 'Admin', 'administrador', true);
+set role authenticated; set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000003';
+select guardar_perfil('Director@ramarierp.com', 'Director General', 'director', array['reportes']);
+select email, nombre, rol, modulos from listar_usuarios();
+select nombre, rol, array_length(modulos,1) n_modulos from mi_perfil();
+set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000001';
+insert into proveedores (nombre) values ('Landus');
+select fecha, materia_prima, kg_neto, precio_kg, capturado_por from v_llegadas order by fecha limit 3;
+select * from mi_perfil();
+\set ON_ERROR_STOP 0
+select * from listar_usuarios();
 reset role;
