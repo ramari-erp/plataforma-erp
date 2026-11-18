@@ -54,6 +54,36 @@ export const api = {
   async crearLlegada(datos) {
     return ok(await sb.from('llegadas_mp').insert(datos).select('id').single());
   },
+  async formulas() {
+    return ok(await sb.from('formulas').select('id,nombre,especie').eq('activa', true).order('nombre'));
+  },
+  async formulaIngredientes(formulaId) {
+    return ok(await sb.from('formula_ingredientes')
+      .select('materia_prima_id,kg_por_tonelada').eq('formula_id', formulaId));
+  },
+  // { fecha, formulaId, kg, ingredientes: [{materia_prima_id, kg_por_tonelada}], extras: [{materia_prima_id, cantidad, unidad, nota}], notas, actualizarFormula }
+  async guardarOrden(o) {
+    return ok(await sb.rpc('guardar_orden', {
+      p_fecha: o.fecha, p_formula_id: o.formulaId, p_kg: o.kg,
+      p_ingredientes: o.ingredientes, p_extras: o.extras, p_notas: o.notas,
+      p_actualizar_formula: !!o.actualizarFormula, p_orden_id: o.ordenId ?? null,
+    }));
+  },
+  async ordenes({ desde, hasta } = {}) {
+    let q = sb.from('v_ordenes').select('*').order('fecha', { ascending: false }).order('id', { ascending: false }).limit(500);
+    if (desde) q = q.gte('fecha', desde);
+    if (hasta) q = q.lte('fecha', hasta);
+    return ok(await q);
+  },
+  async consumosOrden(ordenId) {
+    return ok(await sb.from('v_orden_consumos').select('*').eq('orden_id', ordenId).order('es_extra').order('materia_prima'));
+  },
+  async extrasOrden(ordenId) {
+    return ok(await sb.from('orden_extras').select('materia_prima_id,cantidad,unidad,nota').eq('orden_id', ordenId));
+  },
+  async eliminarOrden(ordenId) {
+    return ok(await sb.from('ordenes_produccion').delete().eq('id', ordenId));
+  },
   async inventarioInicial() {
     return ok(await sb.from('inventario_inicial').select('materia_prima_id,fecha,kg,costo_kg'));
   },

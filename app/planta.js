@@ -3,10 +3,12 @@ import { api } from './api.js';
 import { esc, fmt, hoy, aviso, cargando, errorEn } from './ui.js';
 import { sesion } from './sesion.js';
 import { seccionInventario } from './inventario.js';
+import { seccionProduccion } from './produccion.js';
 
 const SECCIONES = [
   { codigo: 'resumen', nombre: 'Resumen' },
   { codigo: 'llegadas', nombre: 'Llegadas de materia prima' },
+  { codigo: 'produccion', nombre: 'Producción' },
   { codigo: 'existencias', nombre: 'Existencias' },
   { codigo: 'inventario', nombre: 'Inventario físico' },
 ];
@@ -23,6 +25,7 @@ export function pantallaPlanta(cont, seccion = 'resumen') {
   if (actual.codigo === 'resumen') return resumen(zona);
   if (actual.codigo === 'llegadas') return llegadas(zona);
   if (actual.codigo === 'inventario') return seccionInventario(zona);
+  if (actual.codigo === 'produccion') return seccionProduccion(zona);
   return existencias(zona);
 }
 
@@ -32,14 +35,17 @@ function resumen(zona) {
   let vivo = true;
   async function pintar() {
     try {
-      const [cap, exis, ult] = await Promise.all([
-        api.capacidad(), api.existencias(), api.llegadas({ desde: hoy(-6) }),
+      const [cap, exis, ult, prod] = await Promise.all([
+        api.capacidad(), api.existencias(), api.llegadas({ desde: hoy(-6) }), api.ordenes({ desde: hoy(-6) }),
       ]);
       if (!vivo) return;
       const valor = exis.reduce((s, x) => s + Number(x.valor_inventario || 0), 0);
       const deHoy = ult.filter((l) => l.fecha === hoy());
       const kgHoy = deHoy.reduce((s, l) => s + Number(l.kg_neto), 0);
       const kgSemana = ult.reduce((s, l) => s + Number(l.kg_neto), 0);
+      const prodHoy = prod.filter((o) => o.fecha === hoy());
+      const kgProd = prod.reduce((s, o) => s + Number(o.kg_producidos), 0);
+      const costoProdKg = kgProd ? prod.reduce((s, o) => s + Number(o.costo_mp), 0) / kgProd : 0;
       const negativas = exis.filter((x) => Number(x.existencia_kg) < 0);
       const bajoMin = exis.filter((x) => x.bajo_minimo);
       const enGrupo = new Set(cap.flatMap((g) => (g.materias || '').split(', ')));
@@ -50,6 +56,8 @@ function resumen(zona) {
           <div class="kpi"><span>Valor del inventario de materia prima</span><b>${fmt.dinero(valor)}</b></div>
           <div class="kpi"><span>Llegadas de hoy</span><b>${fmt.t(kgHoy)}</b><small>${deHoy.length} ${deHoy.length === 1 ? 'descarga' : 'descargas'}</small></div>
           <div class="kpi"><span>Llegadas últimos 7 días</span><b>${fmt.t(kgSemana)}</b><small>${ult.length} descargas</small></div>
+          <div class="kpi"><span>Producido hoy</span><b>${fmt.t(prodHoy.reduce((s, o) => s + Number(o.kg_producidos), 0))}</b><small>${prodHoy.length} ${prodHoy.length === 1 ? 'orden' : 'órdenes'}</small></div>
+          <div class="kpi"><span>Producido últimos 7 días</span><b>${fmt.t(prod.reduce((s, o) => s + Number(o.kg_producidos), 0))}</b><small>costo MP ${fmt.precio(costoProdKg)}</small></div>
         </div>
         ${negativas.length || bajoMin.length ? `
           <div class="caja caja-alerta">
@@ -69,7 +77,8 @@ function resumen(zona) {
   cargando(zona);
   pintar();
   const soltar = api.enVivo('llegadas_mp', () => pintar());
-  return () => { vivo = false; soltar(); };
+  const soltar2 = api.enVivo('ordenes_produccion', () => pintar());
+  return () => { vivo = false; soltar(); soltar2(); };
 }
 
 function tarjetaCapacidad(g) {

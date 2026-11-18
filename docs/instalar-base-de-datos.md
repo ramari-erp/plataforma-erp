@@ -13,9 +13,11 @@
    desde la plataforma y actualización en vivo).
 8. Repite con `supabase/migrations/0005_inventario_fisico.sql` (inventario de arranque, conteo físico
    semanal con ajustes, precios de referencia de septiembre).
-9. Revisa en **Table Editor** que existan las tablas `granjas`, `materias_primas`, `formulas`.
+9. Repite con `supabase/migrations/0006_ordenes_produccion.sql` (órdenes de producción con fórmula
+   ajustable por orden y extras).
+10. Revisa en **Table Editor** que existan las tablas `granjas`, `materias_primas`, `formulas`.
 
-Siempre en ese orden: 0001 → 0002 → seed → 0003 → 0004 → 0005.
+Siempre en ese orden: 0001 → 0002 → seed → 0003 → 0004 → 0005 → 0006.
 Si un archivo marca "already exists", ese archivo ya se había ejecutado: pasa al siguiente. Si una ejecución marca error, no sigas con la siguiente: copia el mensaje y compártelo.
 
 ## Qué queda cargado

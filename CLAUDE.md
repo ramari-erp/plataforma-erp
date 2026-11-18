@@ -20,7 +20,8 @@ Todo en español: tablas, columnas, interfaz y mensajes.
   ajustes, mortalidad, ventas, vales).
 - Materia prima: kárdex `movimientos_mp` lo escriben solo triggers; costo = promedio ponderado móvil,
   recalculado en orden cronológico por `recalcular_mp()` (fechas atrasadas quedan bien).
-- La materia prima se descuenta al registrar la orden de producción (fórmula + medicación de la orden).
+- La materia prima se descuenta al registrar la orden de producción. Cada orden guarda su copia de ingredientes
+  (`orden_ingredientes`, modificable) + extras (`orden_extras`, kg/t o kg totales); se guarda con `guardar_orden()`.
   La salida a granja descuenta producto terminado y se carga a granja, caseta y lote/banda
   (lote automático vía `caseta_lotes`).
 - Seguridad: RLS en todas las tablas con `aplicar_seguridad(tabla, modulo)`: leer = usuario activo,
