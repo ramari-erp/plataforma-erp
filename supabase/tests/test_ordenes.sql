@@ -62,3 +62,12 @@ select guardar_orden('2026-11-23', (select f from ids), 12000, '[]', '[]', null,
 select id, formula, kg_producidos, granja from v_ordenes order by id;
 select * from v_produccion_granja order by fecha, granja;
 reset role;
+
+-- 0009: área (por omisión la de la fórmula; FASE 1 es de aves; aquí se manda a ganado a propósito)
+set role authenticated; set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000001';
+select guardar_orden('2026-11-24', (select id from formulas where nombre = 'FASE 1'), 5000, '[]', '[]', null, false, null, (select id from granjas where nombre = 'Paraíso')) as aves_por_formula;
+select guardar_orden('2026-11-24', (select f from ids), 8000, '[]', '[]', null, false, null, (select id from granjas where nombre = 'La Red'), 'ganado') as cambiada_a_ganado;
+select id, formula, granja, area from v_ordenes order by id;
+select * from v_produccion_granja where fecha = '2026-11-24';
+select granja, area from v_granja_areas where granja = 'La Red' order by area;
+reset role;

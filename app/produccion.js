@@ -4,6 +4,7 @@ import { esc, fmt, hoy, aviso, cargando, errorEn } from './ui.js';
 import { sesion } from './sesion.js';
 
 const ESPECIES = { cerdos: 'Cerdos', aves: 'Aves', ganado: 'Ganado', borregos: 'Borregos', otro: 'Otros' };
+const AREAS = { cerdos: 'Cerdos', aves: 'Aves', ganado: 'Ganado', borregos: 'Borregos' };
 const numero = (v) => (v === '' || v == null ? null : Number(v));
 const kgFmt = (v) => fmt.kg(Math.round(Number(v) * 100) / 100);
 
@@ -16,6 +17,7 @@ export function seccionProduccion(zona) {
     <form class="filtros" id="filtros-ordenes">
       <label>Desde<input type="date" name="desde"></label>
       <label>Hasta<input type="date" name="hasta"></label>
+      <label>Área<select name="area"><option value="">Todas</option>${Object.entries(AREAS).map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select></label>
       <label>Granja destino<select name="granja"><option value="">Todas</option><option value="ninguna">Sin granja</option></select></label>
     </form>
     <div id="historial-ordenes"></div>`;
@@ -28,8 +30,8 @@ export function seccionProduccion(zona) {
   if (puede) {
     (async () => {
       try {
-        const [formulas, exis, granjas] = await Promise.all([api.formulas(), api.existencias(), api.granjas()]);
-        if (vivo) formularioOrden(zona.querySelector('#zona-orden'), formulas, exis, granjas.filter((g) => g.activa), pintarHistorial);
+        const [formulas, exis, granjas, granjaAreas] = await Promise.all([api.formulas(), api.existencias(), api.granjas(), api.granjaAreas()]);
+        if (vivo) formularioOrden(zona.querySelector('#zona-orden'), formulas, exis, granjas.filter((g) => g.activa), granjaAreas, pintarHistorial);
       } catch (e) { errorEn(zona.querySelector('#zona-orden'), e); }
     })();
   }
@@ -45,7 +47,7 @@ export function seccionProduccion(zona) {
 
 // ---------- Formulario ----------
 
-function formularioOrden(zona, formulas, exis, granjas, alGuardar) {
+function formularioOrden(zona, formulas, exis, granjas, granjaAreas, alGuardar) {
   const materias = new Map(exis.map((m) => [m.id, m]));
   const opcionesFormula = Object.entries(ESPECIES).map(([esp, nombre]) => {
     const lista = formulas.filter((f) => (f.especie || 'otro') === esp);
@@ -66,7 +68,8 @@ function formularioOrden(zona, formulas, exis, granjas, alGuardar) {
         <label>Fecha<input type="date" name="fecha" value="${hoy()}" required></label>
         <label class="ancho2">Fórmula<select name="formula" required><option value="">Elige…</option>${opcionesFormula}</select></label>
         <label>Toneladas producidas<input type="number" name="toneladas" min="0.001" step="0.001" inputmode="decimal" required></label>
-        <label class="ancho2">Granja destino<select name="granja"><option value="">Sin granja (queda en planta)</option>${granjas.map((g) => `<option value="${g.id}">${esc(g.nombre)}</option>`).join('')}</select></label>
+        <label>Área<select name="area"><option value="">Elige…</option>${Object.entries(AREAS).map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select></label>
+        <label>Granja destino<select name="granja"></select></label>
       </div>
 
       <div id="bloque-ingredientes" class="oculto">
@@ -100,6 +103,17 @@ function formularioOrden(zona, formulas, exis, granjas, alGuardar) {
 
   const form = zona.querySelector('#form-orden');
   const cuerpo = form.querySelector('#filas-ing');
+
+  // Granjas del área elegida (si no hay área, todas las activas).
+  const pintarGranjas = () => {
+    const area = form.area.value, antes = form.granja.value;
+    const ids = new Set(granjaAreas.filter((x) => x.area === area).map((x) => x.granja_id));
+    const lista = area ? granjas.filter((g) => ids.has(g.id)) : granjas;
+    form.granja.innerHTML = `<option value="">Sin granja (queda en planta)</option>${lista.map((g) => `<option value="${g.id}">${esc(g.nombre)}</option>`).join('')}`;
+    if (lista.some((g) => String(g.id) === antes)) form.granja.value = antes;
+  };
+  pintarGranjas();
+  form.area.addEventListener('change', pintarGranjas);
   const extrasZona = form.querySelector('#filas-extras');
   let base = new Map();   // materia_prima_id → kg/t de la fórmula base
 
@@ -181,6 +195,8 @@ function formularioOrden(zona, formulas, exis, granjas, alGuardar) {
 
   form.formula.addEventListener('change', async () => {
     const id = Number(form.formula.value);
+    const especie = formulas.find((f) => f.id === id)?.especie;
+    if (AREAS[especie]) { form.area.value = especie; pintarGranjas(); }
     const bloque = form.querySelector('#bloque-ingredientes');
     if (!id) { bloque.classList.add('oculto'); return; }
     try {
@@ -229,6 +245,7 @@ function formularioOrden(zona, formulas, exis, granjas, alGuardar) {
         fecha: form.fecha.value,
         formulaId: Number(form.formula.value),
         granjaId: form.granja.value ? Number(form.granja.value) : null,
+        area: form.area.value || null,
         kg: Math.round(t * 1000 * 100) / 100,
         ingredientes: ingredientes.map(({ materia_prima_id, kg_por_tonelada }) => ({ materia_prima_id, kg_por_tonelada })),
         extras: extras.filter((e) => e.materia_prima_id && e.cantidad),
@@ -244,6 +261,7 @@ function formularioOrden(zona, formulas, exis, granjas, alGuardar) {
       form.reset();
       form.fecha.value = fecha;
       cuerpo.innerHTML = ''; extrasZona.innerHTML = '';
+      pintarGranjas();
       form.querySelector('#bloque-ingredientes').classList.add('oculto');
       alGuardar();
     } catch (e) {
@@ -258,7 +276,7 @@ function formularioOrden(zona, formulas, exis, granjas, alGuardar) {
 
 async function historial(zona, filtros, sigueVivo) {
   try {
-    const filas = await api.ordenes({ desde: filtros.desde.value, hasta: filtros.hasta.value, granja: filtros.granja.value || null });
+    const filas = await api.ordenes({ desde: filtros.desde.value, hasta: filtros.hasta.value, granja: filtros.granja.value || null, area: filtros.area.value || null });
     if (!sigueVivo()) return;
     if (!filas.length) { zona.innerHTML = '<p class="vacio">No hay órdenes en esas fechas.</p>'; return; }
     const kg = filas.reduce((s, o) => s + Number(o.kg_producidos), 0);
@@ -267,12 +285,12 @@ async function historial(zona, filtros, sigueVivo) {
     zona.innerHTML = `
       <p class="nota">${filas.length} órdenes · ${fmt.t(kg)} · costo de materia prima ${fmt.dinero(costo)} (${fmt.precio(kg ? costo / kg : 0)})</p>
       <div class="tabla-scroll"><table>
-        <thead><tr><th>Fecha</th><th>Fórmula</th><th>Granja destino</th><th class="num">Producido</th><th class="num">Costo/kg</th><th class="num">Costo MP</th><th>Cambios</th><th>Capturó</th><th></th></tr></thead>
+        <thead><tr><th>Fecha</th><th>Fórmula</th><th>Destino</th><th class="num">Producido</th><th class="num">Costo/kg</th><th class="num">Costo MP</th><th>Cambios</th><th>Capturó</th><th></th></tr></thead>
         <tbody>${filas.map((o) => `
           <tr data-orden="${o.id}">
             <td>${fmt.fecha(o.fecha)}</td>
             <td>${esc(o.formula)}${o.notas ? `<small>${esc(o.notas)}</small>` : ''}</td>
-            <td>${esc(o.granja || '—')}</td>
+            <td>${esc(o.granja || '—')}<small>${esc(AREAS[o.area] || 'Sin área')}</small></td>
             <td class="num">${fmt.t(o.kg_producidos)}</td>
             <td class="num">${fmt.precio(o.costo_kg)}</td>
             <td class="num">${fmt.dinero(o.costo_mp)}</td>
