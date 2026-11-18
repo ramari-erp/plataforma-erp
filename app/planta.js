@@ -4,11 +4,13 @@ import { esc, fmt, hoy, aviso, cargando, errorEn } from './ui.js';
 import { sesion } from './sesion.js';
 import { seccionInventario } from './inventario.js';
 import { seccionProduccion } from './produccion.js';
+import { seccionContratos, alertasContratos, precioContrato } from './contratos.js';
 
 const SECCIONES = [
   { codigo: 'resumen', nombre: 'Resumen' },
   { codigo: 'llegadas', nombre: 'Llegadas de materia prima' },
   { codigo: 'produccion', nombre: 'Producción' },
+  { codigo: 'contratos', nombre: 'Contratos' },
   { codigo: 'existencias', nombre: 'Existencias' },
   { codigo: 'inventario', nombre: 'Inventario físico' },
 ];
@@ -26,6 +28,7 @@ export function pantallaPlanta(cont, seccion = 'resumen') {
   if (actual.codigo === 'llegadas') return llegadas(zona);
   if (actual.codigo === 'inventario') return seccionInventario(zona);
   if (actual.codigo === 'produccion') return seccionProduccion(zona);
+  if (actual.codigo === 'contratos') return seccionContratos(zona);
   return existencias(zona);
 }
 
@@ -35,9 +38,11 @@ function resumen(zona) {
   let vivo = true;
   async function pintar() {
     try {
-      const [cap, exis, ult, prod] = await Promise.all([
+      const [cap, exis, ult, prod, cob, contr] = await Promise.all([
         api.capacidad(), api.existencias(), api.llegadas({ desde: hoy(-6) }), api.ordenes({ desde: hoy(-6) }),
+        api.cobertura(), api.contratos({ soloVigentes: true }),
       ]);
+      const alertasCont = alertasContratos(cob, contr);
       if (!vivo) return;
       const valor = exis.reduce((s, x) => s + Number(x.valor_inventario || 0), 0);
       const deHoy = ult.filter((l) => l.fecha === hoy());
@@ -59,8 +64,9 @@ function resumen(zona) {
           <div class="kpi"><span>Producido hoy</span><b>${fmt.t(prodHoy.reduce((s, o) => s + Number(o.kg_producidos), 0))}</b><small>${prodHoy.length} ${prodHoy.length === 1 ? 'orden' : 'órdenes'}</small></div>
           <div class="kpi"><span>Producido últimos 7 días</span><b>${fmt.t(prod.reduce((s, o) => s + Number(o.kg_producidos), 0))}</b><small>costo MP ${fmt.precio(costoProdKg)}</small></div>
         </div>
-        ${negativas.length || bajoMin.length ? `
+        ${negativas.length || bajoMin.length || alertasCont.length ? `
           <div class="caja caja-alerta">
+            ${alertasCont.map((t) => `<p>${t} <a href="#/planta/contratos">Ver contratos</a></p>`).join('')}
             ${negativas.length ? `<p><b>Existencia negativa:</b> ${negativas.map((x) => esc(x.nombre)).join(', ')}. Falta capturar el inventario de arranque o alguna llegada.</p>` : ''}
             ${bajoMin.length ? `<p><b>Bajo el mínimo:</b> ${bajoMin.map((x) => esc(x.nombre)).join(', ')}.</p>` : ''}
           </div>` : ''}
@@ -109,6 +115,9 @@ function llegadas(zona) {
         <label>Fecha<input type="date" name="fecha" required></label>
         <label class="ancho2">Materia prima<select name="materia_prima_id" required><option value="">Cargando…</option></select></label>
         <label class="ancho2">Proveedor<select name="proveedor_id"><option value="">Cargando…</option></select></label>
+        <label class="ancho2" id="campo-contrato">Contrato<select name="contrato_id"><option value="">Elige primero la materia prima</option></select>
+          <small class="ayuda" id="ayuda-contrato"></small></label>
+        <label class="oculto" id="campo-tc">Tipo de cambio (MXN por USD)<input type="number" name="tipo_cambio" min="0.0001" step="0.0001" inputmode="decimal"></label>
         <label class="ancho2 oculto" id="campo-nuevo-prov">Nombre del proveedor nuevo
           <span class="en-linea"><input name="nuevo_proveedor" maxlength="120"><button type="button" class="boton boton-chico" id="btn-guardar-prov">Agregar</button></span>
         </label>
@@ -148,7 +157,7 @@ function llegadas(zona) {
       hist.innerHTML = `
         <p class="nota">${filas.length} llegadas · ${fmt.t(kg)} · ${fmt.dinero(total)} · precio promedio ${fmt.precio(kg ? total / kg : 0)}</p>
         <div class="tabla-scroll"><table>
-          <thead><tr><th>Fecha</th><th>Materia prima</th><th>Proveedor</th><th class="num">Kg neto</th><th class="num">Humedad</th><th class="num">Precio</th><th class="num">Total</th><th>Factura / boleta</th><th>Capturó</th></tr></thead>
+          <thead><tr><th>Fecha</th><th>Materia prima</th><th>Proveedor</th><th class="num">Kg neto</th><th class="num">Humedad</th><th class="num">Precio</th><th class="num">Total</th><th>Factura / boleta</th><th>Contrato</th><th>Capturó</th></tr></thead>
           <tbody>${filas.map((l) => `
             <tr>
               <td>${fmt.fecha(l.fecha)}</td>
@@ -159,6 +168,7 @@ function llegadas(zona) {
               <td class="num">${fmt.precio(l.precio_kg)}</td>
               <td class="num">${fmt.dinero(l.total)}</td>
               <td>${esc([l.factura, l.boleta].filter(Boolean).join(' / ') || '—')}</td>
+              <td>${esc(l.contrato || '—')}</td>
               <td title="${esc(fmt.hora(l.capturado_en))}">${esc(l.capturado_por || '—')}<small>${esc(fmt.hora(l.capturado_en))}</small></td>
             </tr>`).join('')}
           </tbody>
@@ -213,6 +223,49 @@ function prepararFormulario(form, opcionesMp, provs, alGuardar) {
     } catch (e) { aviso(e.message, 'error'); }
   });
 
+  // ---- Contrato: corte automático con cada llegada ----
+  let contratos = [];
+  const campoTc = form.querySelector('#campo-tc');
+  const ayudaContrato = form.querySelector('#ayuda-contrato');
+  const contratoElegido = () => contratos.find((c) => String(c.id) === form.contrato_id.value);
+  const pintarAyudaContrato = () => {
+    const c = contratoElegido();
+    campoTc.classList.toggle('oculto', !c || c.moneda !== 'USD');
+    if (!c) { ayudaContrato.textContent = form.materia_prima_id.value ? 'Compra libre: no descuenta de ningún contrato.' : ''; return; }
+    const kg = parseFloat(form.kg_neto.value) || 0;
+    const exceso = kg - Number(c.kg_pendientes);
+    ayudaContrato.textContent = `Pendiente ${fmt.t(c.kg_pendientes)} de ${fmt.t(c.kg_contratados)}`
+      + (exceso > 0.5 ? ` · esta llegada lo rebasa por ${fmt.kg(exceso)}` : kg ? ` · quedarán ${fmt.t(Number(c.kg_pendientes) - kg)}` : '');
+    ayudaContrato.classList.toggle('ayuda-alerta', exceso > 0.5);
+  };
+  const aplicarContrato = () => {
+    const c = contratoElegido();
+    if (c) {
+      if (String(c.proveedor_id) !== form.proveedor_id.value) form.proveedor_id.value = String(c.proveedor_id);
+      if (c.moneda === 'MXN') form.precio_kg.value = Number(c.precio);
+      else if (form.tipo_cambio.value) form.precio_kg.value = (Number(c.precio) * Number(form.tipo_cambio.value)).toFixed(4);
+    }
+    pintarAyudaContrato();
+  };
+  form.materia_prima_id.addEventListener('change', async () => {
+    const materia = form.materia_prima_id.value;
+    contratos = [];
+    form.contrato_id.innerHTML = '<option value="">Compra libre (sin contrato)</option>';
+    if (materia) {
+      try {
+        contratos = await api.contratos({ soloVigentes: true, materia });
+        form.contrato_id.innerHTML += contratos.map((c) => `<option value="${c.id}">${esc(c.folio || `#${c.id}`)} · ${esc(c.proveedor)} · pendiente ${fmt.t(c.kg_pendientes)} · ${precioContrato(c)}${c.estado_actual === 'vencido' ? ' · VENCIDO' : ''}</option>`).join('');
+        // Si hay uno solo (o uno solo del proveedor elegido), se elige solo.
+        const delProv = contratos.filter((c) => String(c.proveedor_id) === form.proveedor_id.value && Number(c.kg_pendientes) > 0);
+        const candidato = delProv.length === 1 ? delProv[0] : contratos.length === 1 ? contratos[0] : null;
+        if (candidato) form.contrato_id.value = String(candidato.id);
+      } catch (e) { aviso(e.message, 'error'); }
+    }
+    aplicarContrato();
+  });
+  form.contrato_id.addEventListener('change', aplicarContrato);
+  form.tipo_cambio.addEventListener('input', aplicarContrato);
+
   // Neto = bruto − tara (si se capturan los dos). Total = neto × precio.
   const recalcular = (ev) => {
     const bruto = parseFloat(form.kg_bruto.value), tara = parseFloat(form.kg_tara.value);
@@ -221,6 +274,7 @@ function prepararFormulario(form, opcionesMp, provs, alGuardar) {
     }
     const total = (parseFloat(form.kg_neto.value) || 0) * (parseFloat(form.precio_kg.value) || 0);
     form.total.value = fmt.dinero(total);
+    pintarAyudaContrato();
   };
   form.addEventListener('input', recalcular);
 
@@ -231,8 +285,12 @@ function prepararFormulario(form, opcionesMp, provs, alGuardar) {
     if (!isNaN(bruto) && !isNaN(tara) && Math.abs(bruto - tara - parseFloat(form.kg_neto.value)) > 0.5) {
       return aviso('El neto no coincide con bruto − tara. Revisa los kilos.', 'error');
     }
+    const c = contratoElegido();
+    if (c && c.moneda === 'USD' && !form.tipo_cambio.value) return aviso('El contrato es en dólares: captura el tipo de cambio.', 'error');
     const n = (v) => (v === '' ? null : Number(v));
     const datos = {
+      contrato_id: c ? c.id : null,
+      tipo_cambio: c && c.moneda === 'USD' ? Number(form.tipo_cambio.value) : null,
       fecha: form.fecha.value,
       materia_prima_id: Number(form.materia_prima_id.value),
       proveedor_id: form.proveedor_id.value ? Number(form.proveedor_id.value) : null,
@@ -254,6 +312,8 @@ function prepararFormulario(form, opcionesMp, provs, alGuardar) {
       const fecha = form.fecha.value;
       form.reset();
       form.fecha.value = fecha;
+      contratos = [];
+      form.contrato_id.innerHTML = '<option value="">Elige primero la materia prima</option>';
       recalcular();
       alGuardar();
     } catch (e) {

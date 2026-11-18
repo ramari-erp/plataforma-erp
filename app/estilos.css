@@ -167,3 +167,15 @@ tr.detalle > td { background: var(--fondo); white-space: normal; padding: 12px 1
 .boton-peligro { border-color: var(--peligro); color: var(--peligro); }
 #form-orden .ancho-total { margin-top: 12px; }
 #form-orden .casilla { margin: 12px 0; }
+
+/* Contratos */
+.ayuda { color: var(--texto-suave); font-size: .8rem; min-height: 1em; }
+.ayuda-alerta { color: var(--alerta); font-weight: 600; }
+.etiqueta-ok { background: var(--acento-suave); color: var(--acento); }
+.etiqueta-peligro { background: var(--peligro-suave); color: var(--peligro); }
+.etiqueta-gris { background: var(--fondo); color: var(--texto-suave); }
+.celda-progreso { min-width: 160px; }
+.celda-progreso .barra-cap { height: 8px; }
+td.acciones { white-space: nowrap; }
+td.acciones .boton + .boton { margin-left: 6px; }
+#alertas-contratos .kpis { margin-bottom: 12px; }

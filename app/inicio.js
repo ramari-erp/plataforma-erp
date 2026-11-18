@@ -2,6 +2,7 @@
 import { api } from './api.js';
 import { esc, fmt, cargando, errorEn } from './ui.js';
 import { sesion } from './sesion.js';
+import { alertasContratos } from './contratos.js';
 
 export function pantallaInicio(cont) {
   let vivo = true;
@@ -19,7 +20,7 @@ export function pantallaInicio(cont) {
   cargando(zona);
   (async () => {
     try {
-      const [cap, exis] = await Promise.all([api.capacidad(), api.existencias()]);
+      const [cap, exis, cob, contr] = await Promise.all([api.capacidad(), api.existencias(), api.cobertura(), api.contratos({ soloVigentes: true })]);
       if (!vivo) return;
       const avisos = [
         ...cap.filter((g) => Number(g.ocupacion_pct) >= 90)
@@ -27,6 +28,7 @@ export function pantallaInicio(cont) {
         ...exis.filter((x) => x.bajo_minimo && Number(x.existencia_kg) >= 0)
           .map((x) => `Planta: <b>${esc(x.nombre)}</b> bajo el mínimo (${fmt.kg(x.existencia_kg)}).`),
       ];
+      avisos.push(...alertasContratos(cob, contr).map((t) => `Contratos: ${t}`));
       const negativas = exis.filter((x) => Number(x.existencia_kg) < 0).length;
       if (negativas) avisos.push(`Planta: <b>${negativas}</b> materias primas con existencia negativa; falta el inventario de arranque o alguna llegada.`);
       zona.innerHTML = avisos.length
