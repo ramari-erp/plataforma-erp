@@ -38,7 +38,7 @@ PostgreSQL 16 está disponible en el contenedor. `supabase/tests/supabase_stub.s
 Al agregar una migración, agregarla también a `cargar_todo.sh` y a `docs/instalar-base-de-datos.md`.
 Croquis y capacidades de la planta: `docs/planta/`.
 Casetas y tolvas: `scripts/generar_casetas.py` genera `supabase/datos/0001_casetas_tolvas.sql` desde CAPACIDADES.xlsx
-(una hoja por granja; capacidad de tolvas por caseta, repartida entre sus tolvas). Los archivos de `supabase/datos/` son repetibles.
+(una hoja por granja; la capacidad de tolvas de la hoja es la de CADA tolva). Los archivos de `supabase/datos/` son repetibles.
 
 ## Plan
 Plan de acción del proyecto (fases 0–8, tareas, formatos): documento "Plan de acción — Plataforma ERP

@@ -31,7 +31,7 @@ export const api = {
   // Catálogos
   async modulos() { return ok(await sb.from('modulos').select('codigo,nombre,orden').order('orden')); },
   async granjas() {
-    return ok(await sb.from('granjas').select('id,nombre,activa').order('nombre'));
+    return ok(await sb.from('granjas').select('id,nombre,activa,superficie_ha,notas').order('nombre'));
   },
   async casetas() {
     return ok(await sb.from('v_casetas').select('*').order('granja').order('area').order('orden'));

@@ -27,7 +27,8 @@ export function pantallaGranjas(cont, granjaElegida) {
         const ton = cs.reduce((s, c) => s + Number(c.capacidad_tolvas_kg), 0);
         return `<a class="tarjeta acceso ${granjaElegida === String(g.id) ? 'activo' : ''}" href="#/granjas/${g.id}">
           <b>${esc(g.nombre)}${g.activa ? '' : ' <span class="etiqueta etiqueta-gris">En construcción</span>'}</b>
-          <span>${cs.length ? `${areas.join(' · ')} · ${cs.length} casetas · ${tolvas} tolvas (${fmt.t(ton)})` : 'Sin casetas capturadas'}</span></a>`;
+          <span>${cs.length ? `${areas.join(' · ')} · ${cs.length} casetas · ${tolvas} tolvas (${fmt.t(ton)})`
+            : g.superficie_ha ? `${esc(g.notas || 'Berries')} · ${n0.format(g.superficie_ha)} hectáreas` : 'Sin casetas capturadas'}</span></a>`;
       }).join('')}</div>`;
       const g = granjas.find((x) => String(x.id) === granjaElegida);
       if (g) detalle(cont.querySelector('#detalle-granja'), g, porGranja.get(g.nombre) || []);

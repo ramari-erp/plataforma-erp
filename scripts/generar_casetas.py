@@ -1,6 +1,6 @@
 """Genera supabase/datos/0001_casetas_tolvas.sql desde CAPACIDADES.xlsx (una hoja por granja).
 Uso: python3 -I scripts/generar_casetas.py CAPACIDADES.xlsx supabase/datos/0001_casetas_tolvas.sql
-La capacidad de tolvas de la hoja es por caseta; si la caseta tiene varias tolvas se reparte en partes iguales."""
+La capacidad de tolvas de la hoja es la de CADA tolva (confirmado 19-nov-2026)."""
 import sys, openpyxl
 
 wb = openpyxl.load_workbook(sys.argv[1], data_only=True)
@@ -98,9 +98,14 @@ def q(v):
 L = ["-- Generado por scripts/generar_casetas.py desde CAPACIDADES.xlsx (19-nov-2026). Se puede volver a correr:",
      "-- actualiza las casetas existentes y reemplaza sus tolvas.",
      "",
+     "-- Bellavista: arándanos, 10 hectáreas.",
+     "insert into granjas (nombre, superficie_ha, notas) values ('Bellavista', 10, 'Arándanos')",
+     "on conflict (nombre) do update set superficie_ha = excluded.superficie_ha, notas = excluded.notas;",
+     "",
      "insert into granja_areas (granja_id, area, subarea)",
      "select g.id, x.area::area_productiva, x.subarea from (values",
-     "  ('Rodadero', 'borregos', null), ('Palenque', 'cerdos', 'sitio2'), ('Palenque', 'cerdos', 'sitio3')",
+     "  ('Rodadero', 'borregos', null), ('Palenque', 'cerdos', 'sitio2'), ('Palenque', 'cerdos', 'sitio3'),",
+     "  ('Bellavista', 'berries', 'arándano')",
      ") as x (granja, area, subarea) join granjas g on g.nombre = x.granja",
      "on conflict do nothing;",
      "",
@@ -117,12 +122,12 @@ L += ["",
 "  set uso = excluded.uso, capacidad_animales = excluded.capacidad_animales,",
 "      unidad_capacidad = excluded.unidad_capacidad, notas = excluded.notas, orden = excluded.orden;",
 "",
-"-- Tolvas: se reemplazan las de estas casetas (la capacidad de la hoja es por caseta; se reparte entre sus tolvas).",
+"-- Tolvas: se reemplazan las de estas casetas. La capacidad de la hoja es la de cada tolva.",
 "delete from tolvas t using casetas k, granjas g, carga_casetas c",
 "where t.caseta_id = k.id and k.granja_id = g.id and g.nombre = c.granja and k.area::text = c.area",
 "  and coalesce(k.seccion, '') = coalesce(c.seccion, '') and k.nombre = c.nombre;",
 "insert into tolvas (caseta_id, nombre, capacidad_kg)",
-"select k.id, 'Tolva ' || n, round(c.ton_tolvas * 1000 / c.tolvas, 2)",
+"select k.id, 'Tolva ' || n, round(c.ton_tolvas * 1000, 2)",
 "from carga_casetas c",
 "join granjas g on g.nombre = c.granja",
 "join casetas k on k.granja_id = g.id and k.area::text = c.area and coalesce(k.seccion, '') = coalesce(c.seccion, '') and k.nombre = c.nombre",
