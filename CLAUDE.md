@@ -40,7 +40,7 @@ Croquis y capacidades de la planta: `docs/planta/`.
 Casetas y tolvas: `scripts/generar_casetas.py` genera `supabase/datos/0001_casetas_tolvas.sql` desde CAPACIDADES.xlsx
 (una hoja por granja; la capacidad de tolvas de la hoja es la de CADA tolva). Los archivos de `supabase/datos/` son repetibles.
 El SQL Editor de Supabase puede correr cada instrucción en otra conexión: no usar tablas temporales entre
-instrucciones (meter todo en un bloque `do $$ … $$`).
+instrucciones; usar una sola instrucción con CTE (`with datos as (values …)`) por cada paso.
 
 ## Plan
 Plan de acción del proyecto (fases 0–8, tareas, formatos): documento "Plan de acción — Plataforma ERP

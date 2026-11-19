@@ -1,24 +1,20 @@
--- Generado por scripts/generar_casetas.py desde CAPACIDADES.xlsx (19-nov-2026). Se puede volver a correr:
--- actualiza las casetas existentes y reemplaza sus tolvas. Todo va en un solo bloque (el editor de
--- Supabase no conserva tablas temporales entre instrucciones).
+-- CARGA DE CASETAS Y TOLVAS v3 (19-nov-2026) — generado por scripts/generar_casetas.py desde CAPACIDADES.xlsx.
+-- Se puede volver a correr: actualiza casetas y tolvas sin duplicar. No usa tablas auxiliares.
 
-do $carga$
-begin
-  -- Bellavista: arándanos, 10 hectáreas.
-  insert into granjas (nombre, superficie_ha, notas) values ('Bellavista', 10, 'Arándanos')
-  on conflict (nombre) do update set superficie_ha = excluded.superficie_ha, notas = excluded.notas;
+-- 1) Bellavista: arándanos, 10 hectáreas.
+insert into granjas (nombre, superficie_ha, notas) values ('Bellavista', 10, 'Arándanos')
+on conflict (nombre) do update set superficie_ha = excluded.superficie_ha, notas = excluded.notas;
 
-  insert into granja_areas (granja_id, area, subarea)
-  select g.id, x.area::area_productiva, x.subarea from (values
-    ('Rodadero', 'borregos', null), ('Palenque', 'cerdos', 'sitio2'), ('Palenque', 'cerdos', 'sitio3'),
-    ('Bellavista', 'berries', 'arándano')
-  ) as x (granja, area, subarea) join granjas g on g.nombre = x.granja
-  on conflict do nothing;
+-- 2) Áreas que faltaban.
+insert into granja_areas (granja_id, area, subarea)
+select g.id, x.area::area_productiva, x.subarea from (values
+  ('Rodadero', 'borregos', null), ('Palenque', 'cerdos', 'sitio2'), ('Palenque', 'cerdos', 'sitio3'),
+  ('Bellavista', 'berries', 'arándano')
+) as x (granja, area, subarea) join granjas g on g.nombre = x.granja
+on conflict do nothing;
 
-  drop table if exists carga_casetas;
-  create temp table carga_casetas (granja text, area text, seccion text, nombre text, uso text, capacidad numeric,
-    unidad text, tolvas int, ton_tolvas numeric, notas text, orden int);
-  insert into carga_casetas values
+-- 3) Casetas y sus tolvas, en una sola instrucción. La capacidad de tolva es la de CADA tolva.
+with datos (granja, area, seccion, nombre, uso, capacidad, unidad, tolvas, ton_tolvas, notas, orden) as (values
     ('Ramari', 'cerdos', null, 'Caseta 1', 'engorda', 900, 'cerdos', 1, 10, null, 0),
     ('Ramari', 'cerdos', null, 'Caseta 2', 'engorda', 850, 'cerdos', 1, 10, null, 1),
     ('Ramari', 'cerdos', null, 'Caseta 4', 'engorda', 500, 'cerdos', 1, 7, null, 2),
@@ -118,33 +114,27 @@ begin
     ('Palenque', 'cerdos', 'Reemplazo', 'Tolva 1', 'reemplazos', null, 'animales', 1, 6, 'Capacidad de animales pendiente', 96),
     ('Palenque', 'cerdos', 'Reemplazo', 'Tolva 2', 'reemplazos', null, 'animales', 1, 9, 'Capacidad de animales pendiente', 97),
     ('Palenque', 'cerdos', 'Sitio 2-3', 'Tolva 1', 'destete y engorda', null, 'animales', 1, 4, 'Capacidad de animales pendiente', 98),
-    ('Palenque', 'cerdos', 'Lactancia-iniciador', 'Tolva 1', 'maternidad', null, 'animales', 1, 10, 'Capacidad de animales pendiente', 99);
-
+    ('Palenque', 'cerdos', 'Lactancia-iniciador', 'Tolva 1', 'maternidad', null, 'animales', 1, 10, 'Capacidad de animales pendiente', 99)
+),
+guardadas as (
   insert into casetas (granja_id, area, seccion, nombre, uso, capacidad_animales, unidad_capacidad, notas, orden)
-  select g.id, c.area::area_productiva, c.seccion, c.nombre, c.uso, c.capacidad, c.unidad, c.notas, c.orden
-  from carga_casetas c join granjas g on g.nombre = c.granja
+  select g.id, d.area::area_productiva, d.seccion, d.nombre, d.uso, d.capacidad, d.unidad, d.notas, d.orden
+  from datos d join granjas g on g.nombre = d.granja
   on conflict (granja_id, area, coalesce(seccion, ''), nombre) do update
     set uso = excluded.uso, capacidad_animales = excluded.capacidad_animales,
-        unidad_capacidad = excluded.unidad_capacidad, notas = excluded.notas, orden = excluded.orden;
+        unidad_capacidad = excluded.unidad_capacidad, notas = excluded.notas, orden = excluded.orden
+  returning id, orden
+)
+insert into tolvas (caseta_id, nombre, capacidad_kg, activa)
+select k.id, 'Tolva ' || n, round(d.ton_tolvas * 1000, 2), true
+from guardadas k
+join datos d on d.orden = k.orden
+cross join generate_series(1, d.tolvas) as n
+where d.tolvas > 0 and d.ton_tolvas > 0
+on conflict (caseta_id, nombre) do update set capacidad_kg = excluded.capacidad_kg, activa = true;
 
-  -- Tolvas: se reemplazan las de estas casetas. La capacidad de la hoja es la de cada tolva.
-  delete from tolvas t using casetas k, granjas g, carga_casetas c
-  where t.caseta_id = k.id and k.granja_id = g.id and g.nombre = c.granja and k.area::text = c.area
-    and coalesce(k.seccion, '') = coalesce(c.seccion, '') and k.nombre = c.nombre;
-  insert into tolvas (caseta_id, nombre, capacidad_kg)
-  select k.id, 'Tolva ' || n, round(c.ton_tolvas * 1000, 2)
-  from carga_casetas c
-  join granjas g on g.nombre = c.granja
-  join casetas k on k.granja_id = g.id and k.area::text = c.area and coalesce(k.seccion, '') = coalesce(c.seccion, '') and k.nombre = c.nombre
-  cross join generate_series(1, c.tolvas) as n
-  where c.tolvas > 0 and c.ton_tolvas > 0;
-
-  drop table carga_casetas;
-end
-$carga$;
-
--- Resultado: casetas y tolvas por granja
+-- 4) Resultado: casetas y tolvas por granja
 select g.nombre as granja, k.area, count(distinct k.id) as casetas, count(t.id) as tolvas,
        round(sum(t.capacidad_kg) / 1000, 1) as toneladas_en_tolvas
-from casetas k join granjas g on g.id = k.granja_id left join tolvas t on t.caseta_id = k.id
+from casetas k join granjas g on g.id = k.granja_id left join tolvas t on t.caseta_id = k.id and t.activa
 group by g.nombre, k.area order by g.nombre, k.area;
