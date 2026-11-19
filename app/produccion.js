@@ -25,13 +25,14 @@ export function seccionProduccion(zona) {
   filtros.desde.value = hoy(-30);
   filtros.hasta.value = hoy();
   const hist = zona.querySelector('#historial-ordenes');
-  const pintarHistorial = () => historial(hist, filtros, () => vivo);
+  let editor = null;   // el formulario expone editar(orden)
+  const pintarHistorial = () => historial(hist, filtros, () => vivo, (orden) => editor?.editar(orden), pintarHistorial);
 
   if (puede) {
     (async () => {
       try {
         const [formulas, exis, granjas, granjaAreas] = await Promise.all([api.formulas(), api.existencias(), api.granjas(), api.granjaAreas()]);
-        if (vivo) formularioOrden(zona.querySelector('#zona-orden'), formulas, exis, granjas.filter((g) => g.activa), granjaAreas, pintarHistorial);
+        if (vivo) editor = formularioOrden(zona.querySelector('#zona-orden'), formulas, exis, granjas.filter((g) => g.activa), granjaAreas, pintarHistorial);
       } catch (e) { errorEn(zona.querySelector('#zona-orden'), e); }
     })();
   }
@@ -63,11 +64,12 @@ function formularioOrden(zona, formulas, exis, granjas, granjaAreas, alGuardar) 
 
   zona.innerHTML = `
     <form class="tarjeta formulario" id="form-orden" autocomplete="off">
-      <h2>Nueva orden de producción</h2>
+      <h2 id="titulo-orden">Nueva orden de producción</h2>
       <div class="rejilla">
         <label>Fecha<input type="date" name="fecha" value="${hoy()}" required></label>
         <label class="ancho2">Fórmula<select name="formula" required><option value="">Elige…</option>${opcionesFormula}</select></label>
-        <label>Toneladas producidas<input type="number" name="toneladas" min="0.001" step="0.001" inputmode="decimal" required></label>
+        <label>Kg solicitados<input type="number" name="kg_solicitados" min="0.01" step="0.01" inputmode="decimal" required></label>
+        <label>Kg reales (pesada)<input type="number" name="kg_reales" min="0.01" step="0.01" inputmode="decimal" placeholder="Si ya se pesó"></label>
         <label>Área<select name="area"><option value="">Elige…</option>${Object.entries(AREAS).map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select></label>
         <label>Granja destino<select name="granja"></select></label>
       </div>
@@ -98,6 +100,7 @@ function formularioOrden(zona, formulas, exis, granjas, granjaAreas, alGuardar) 
             Guardar estos cambios como la nueva fórmula base (las próximas órdenes los traerán)</label>` : ''}
         <p class="resumen-captura" id="resumen-orden"></p>
         <button class="boton boton-primario" type="submit">Guardar orden</button>
+        <button class="boton oculto" type="button" id="btn-cancelar-edicion">Cancelar edición</button>
       </div>
     </form>`;
 
@@ -136,8 +139,10 @@ function formularioOrden(zona, formulas, exis, granjas, granjaAreas, alGuardar) 
       <button type="button" class="boton boton-chico" data-quitar-extra>Quitar</button>
     </div>`;
 
+  // Lo que cuenta para el inventario: la pesada real si ya está; si no, lo solicitado.
   const leer = () => {
-    const t = numero(form.toneladas.value) || 0;
+    const kgSol = numero(form.kg_solicitados.value), kgReal = numero(form.kg_reales.value);
+    const t = (kgReal || kgSol || 0) / 1000;
     const ingredientes = [...cuerpo.querySelectorAll('tr')].map((tr) => ({
       tr, materia_prima_id: Number(tr.dataset.id), kg_por_tonelada: numero(tr.querySelector('[name=kgt]').value),
     }));
@@ -147,11 +152,11 @@ function formularioOrden(zona, formulas, exis, granjas, granjaAreas, alGuardar) 
       unidad: d.querySelector('[name=extra_unidad]').value,
       nota: d.querySelector('[name=extra_nota]').value.trim(),
     }));
-    return { t, ingredientes, extras };
+    return { t, kgSol, kgReal, ingredientes, extras };
   };
 
   const actualizar = () => {
-    const { t, ingredientes, extras } = leer();
+    const { t, kgSol, kgReal, ingredientes, extras } = leer();
     let totalKgt = 0, modificada = ingredientes.length !== base.size;
     const necesidad = new Map();
     for (const i of ingredientes) {
@@ -188,27 +193,78 @@ function formularioOrden(zona, formulas, exis, granjas, granjaAreas, alGuardar) 
 
     const costo = [...necesidad].reduce((s, [id, kg]) => s + kg * Number(materias.get(id)?.costo_promedio || 0), 0);
     const nExtras = extras.filter((e) => e.materia_prima_id && e.cantidad).length;
+    const dif = kgSol && kgReal ? kgReal - kgSol : null;
     form.querySelector('#resumen-orden').textContent = t
-      ? `${fmt.t(t * 1000)} · costo estimado ${fmt.dinero(costo)} (${fmt.precio(costo / (t * 1000))})${modificada ? ' · fórmula modificada' : ''}${nExtras ? ` · ${nExtras} extra${nExtras > 1 ? 's' : ''}` : ''}`
+      ? `${kgReal ? `Pesada ${fmt.kg(kgReal)}` : `Solicitado ${fmt.kg(kgSol)} (pendiente de pesada)`}${dif != null ? ` · diferencia ${dif > 0 ? '+' : ''}${fmt.kg(dif)} (${fmt.pct(100 * dif / kgSol)})` : ''} · costo estimado ${fmt.dinero(costo)} (${fmt.precio(costo / (t * 1000))})${modificada ? ' · fórmula modificada' : ''}${nExtras ? ` · ${nExtras} extra${nExtras > 1 ? 's' : ''}` : ''}`
       : '';
   };
 
-  form.formula.addEventListener('change', async () => {
+  // Carga la fórmula base; si se pasan `usados` (al editar), la tabla muestra los de la orden.
+  const cargarFormula = async (usados = null) => {
     const id = Number(form.formula.value);
-    const especie = formulas.find((f) => f.id === id)?.especie;
-    if (AREAS[especie]) { form.area.value = especie; pintarGranjas(); }
     const bloque = form.querySelector('#bloque-ingredientes');
     if (!id) { bloque.classList.add('oculto'); return; }
-    try {
-      const ing = await api.formulaIngredientes(id);
-      base = new Map(ing.map((i) => [i.materia_prima_id, Number(i.kg_por_tonelada)]));
-      cuerpo.innerHTML = ing
-        .sort((a, b) => Number(b.kg_por_tonelada) - Number(a.kg_por_tonelada))
-        .map((i) => filaIngrediente(i.materia_prima_id, Number(i.kg_por_tonelada))).join('');
-      bloque.classList.remove('oculto');
-      actualizar();
-    } catch (e) { aviso(e.message, 'error'); }
+    const ing = await api.formulaIngredientes(id);
+    base = new Map(ing.map((i) => [i.materia_prima_id, Number(i.kg_por_tonelada)]));
+    cuerpo.innerHTML = (usados || ing).slice()
+      .sort((a, b) => Number(b.kg_por_tonelada) - Number(a.kg_por_tonelada))
+      .map((i) => filaIngrediente(i.materia_prima_id, Number(i.kg_por_tonelada))).join('');
+    bloque.classList.remove('oculto');
+    actualizar();
+  };
+  form.formula.addEventListener('change', async () => {
+    const especie = formulas.find((f) => f.id === Number(form.formula.value))?.especie;
+    if (AREAS[especie]) { form.area.value = especie; pintarGranjas(); }
+    try { await cargarFormula(); } catch (e) { aviso(e.message, 'error'); }
   });
+
+  // ---- Modo edición ----
+  let ordenId = null;
+  const titulo = form.querySelector('#titulo-orden');
+  const btnCancelar = form.querySelector('#btn-cancelar-edicion');
+  const limpiar = () => {
+    const fecha = form.fecha.value;
+    form.reset();
+    form.fecha.value = ordenId ? hoy() : fecha;
+    ordenId = null;
+    cuerpo.innerHTML = ''; extrasZona.innerHTML = ''; base = new Map();
+    pintarGranjas();
+    form.querySelector('#bloque-ingredientes').classList.add('oculto');
+    titulo.textContent = 'Nueva orden de producción';
+    form.querySelector('button[type=submit]').textContent = 'Guardar orden';
+    btnCancelar.classList.add('oculto');
+    form.classList.remove('editando');
+  };
+  btnCancelar.addEventListener('click', limpiar);
+
+  async function editar(o) {
+    try {
+      const [usados, extras] = await Promise.all([api.ingredientesOrden(o.id), api.extrasOrden(o.id)]);
+      ordenId = o.id;
+      form.fecha.value = o.fecha;
+      form.formula.value = String(o.formula_id);
+      form.area.value = o.area || '';
+      pintarGranjas();
+      form.granja.value = o.granja_id ? String(o.granja_id) : '';
+      form.kg_solicitados.value = o.kg_solicitados ?? o.kg_producidos;
+      form.kg_reales.value = o.kg_reales ?? '';
+      form.notas.value = o.notas || '';
+      extrasZona.innerHTML = extras.map(() => filaExtra()).join('');
+      [...extrasZona.querySelectorAll('.fila-extra')].forEach((d, i) => {
+        const e = extras.at(i);
+        d.querySelector('[name=extra_mp]').value = String(e.materia_prima_id);
+        d.querySelector('[name=extra_cant]').value = e.cantidad;
+        d.querySelector('[name=extra_unidad]').value = e.unidad;
+        d.querySelector('[name=extra_nota]').value = e.nota || '';
+      });
+      await cargarFormula(usados.length ? usados : null);
+      titulo.textContent = `Editar orden: ${o.formula}, ${fmt.fecha(o.fecha)}`;
+      form.querySelector('button[type=submit]').textContent = 'Guardar cambios';
+      btnCancelar.classList.remove('oculto');
+      form.classList.add('editando');
+      form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch (e) { aviso(e.message, 'error'); }
+  }
 
   form.querySelector('#btn-agregar-ing').addEventListener('click', () => {
     const id = numero(form.nuevo_ing.value), kgt = numero(form.nuevo_ing_kgt.value);
@@ -231,8 +287,8 @@ function formularioOrden(zona, formulas, exis, granjas, granjaAreas, alGuardar) 
 
   form.addEventListener('submit', async (ev) => {
     ev.preventDefault();
-    const { t, ingredientes, extras } = leer();
-    if (!t) return aviso('Captura las toneladas producidas.', 'error');
+    const { t, kgSol, kgReal, ingredientes, extras } = leer();
+    if (!kgSol) return aviso('Captura los kg solicitados.', 'error');
     if (!ingredientes.length) return aviso('La orden necesita al menos un ingrediente.', 'error');
     if (ingredientes.some((i) => !i.kg_por_tonelada)) return aviso('Hay un ingrediente sin kg por tonelada.', 'error');
     const incompletos = extras.filter((e) => (e.materia_prima_id && !e.cantidad) || (!e.materia_prima_id && e.cantidad));
@@ -246,35 +302,34 @@ function formularioOrden(zona, formulas, exis, granjas, granjaAreas, alGuardar) 
         formulaId: Number(form.formula.value),
         granjaId: form.granja.value ? Number(form.granja.value) : null,
         area: form.area.value || null,
-        kg: Math.round(t * 1000 * 100) / 100,
+        kg: kgSol,
+        kgReales: kgReal,
+        ordenId,
         ingredientes: ingredientes.map(({ materia_prima_id, kg_por_tonelada }) => ({ materia_prima_id, kg_por_tonelada })),
         extras: extras.filter((e) => e.materia_prima_id && e.cantidad),
         notas: form.notas.value.trim() || null,
         actualizarFormula: !!form.actualizar_base?.checked && !form.querySelector('#campo-base')?.classList.contains('oculto'),
       });
       const granja = form.granja.value ? ` para ${form.granja.selectedOptions[0].textContent}` : '';
-      aviso(`Orden guardada: ${fmt.t(t * 1000)} de ${formula}${granja}.`);
+      aviso(ordenId ? `Orden corregida: ${formula}.` : `Orden guardada: ${fmt.kg(kgReal || kgSol)} de ${formula}${granja}${kgReal ? '' : ' (pendiente de pesada)'}.`);
       // Existencias nuevas para la siguiente orden
       const nuevas = await api.existencias();
       nuevas.forEach((m) => materias.set(m.id, m));
-      const fecha = form.fecha.value;
-      form.reset();
-      form.fecha.value = fecha;
-      cuerpo.innerHTML = ''; extrasZona.innerHTML = '';
-      pintarGranjas();
-      form.querySelector('#bloque-ingredientes').classList.add('oculto');
+      limpiar();
       alGuardar();
     } catch (e) {
       aviso(e.message, 'error');
     } finally {
-      boton.disabled = false; boton.textContent = 'Guardar orden';
+      boton.disabled = false;
+      boton.textContent = ordenId ? 'Guardar cambios' : 'Guardar orden';
     }
   });
+  return { editar };
 }
 
 // ---------- Historial ----------
 
-async function historial(zona, filtros, sigueVivo) {
+async function historial(zona, filtros, sigueVivo, alEditar, recargar) {
   try {
     const filas = await api.ordenes({ desde: filtros.desde.value, hasta: filtros.hasta.value, granja: filtros.granja.value || null, area: filtros.area.value || null });
     if (!sigueVivo()) return;
@@ -282,21 +337,25 @@ async function historial(zona, filtros, sigueVivo) {
     const kg = filas.reduce((s, o) => s + Number(o.kg_producidos), 0);
     const costo = filas.reduce((s, o) => s + Number(o.costo_mp), 0);
     const admin = sesion.esAdmin();
+    const puede = sesion.puedeCapturar('planta');
+    const pendientes = filas.filter((o) => o.pendiente_pesada).length;
+    const porId = new Map(filas.map((o) => [String(o.id), o]));
     zona.innerHTML = `
-      <p class="nota">${filas.length} órdenes · ${fmt.t(kg)} · costo de materia prima ${fmt.dinero(costo)} (${fmt.precio(kg ? costo / kg : 0)})</p>
+      <p class="nota">${filas.length} órdenes · ${fmt.t(kg)} · costo de materia prima ${fmt.dinero(costo)} (${fmt.precio(kg ? costo / kg : 0)})${pendientes ? ` · <b>${pendientes} pendiente${pendientes > 1 ? 's' : ''} de pesada</b>` : ''}</p>
       <div class="tabla-scroll"><table>
-        <thead><tr><th>Fecha</th><th>Fórmula</th><th>Destino</th><th class="num">Producido</th><th class="num">Costo/kg</th><th class="num">Costo MP</th><th>Cambios</th><th>Capturó</th><th></th></tr></thead>
+        <thead><tr><th>Fecha</th><th>Fórmula</th><th>Destino</th><th class="num">Solicitado</th><th class="num">Pesada real</th><th class="num">Costo/kg</th><th class="num">Costo MP</th><th>Cambios</th><th>Capturó</th><th></th></tr></thead>
         <tbody>${filas.map((o) => `
           <tr data-orden="${o.id}">
             <td>${fmt.fecha(o.fecha)}</td>
             <td>${esc(o.formula)}${o.notas ? `<small>${esc(o.notas)}</small>` : ''}</td>
             <td>${esc(o.granja || '—')}<small>${esc(AREAS[o.area] || 'Sin área')}</small></td>
-            <td class="num">${fmt.t(o.kg_producidos)}</td>
+            <td class="num">${fmt.kg(o.kg_solicitados)}</td>
+            <td class="num celda-pesada">${celdaPesada(o, puede)}</td>
             <td class="num">${fmt.precio(o.costo_kg)}</td>
             <td class="num">${fmt.dinero(o.costo_mp)}</td>
             <td>${o.formula_modificada ? '<span class="etiqueta">Fórmula modificada</span> ' : ''}${Number(o.extras) ? `<span class="etiqueta etiqueta-extra">${o.extras} extra${Number(o.extras) > 1 ? 's' : ''}</span>` : ''}</td>
-            <td>${esc(o.capturado_por || '—')}<small>${esc(fmt.hora(o.capturado_en))}</small></td>
-            <td><button type="button" class="boton boton-chico" data-ver="${o.id}" aria-expanded="false">Ver</button></td>
+            <td>${esc(o.capturado_por || '—')}<small>${esc(fmt.hora(o.capturado_en))}</small>${o.modificado_por ? `<small>Modificó ${esc(o.modificado_por)}, ${esc(fmt.hora(o.modificado_en))}</small>` : ''}</td>
+            <td class="acciones"><button type="button" class="boton boton-chico" data-ver="${o.id}" aria-expanded="false">Ver</button>${puede ? `<button type="button" class="boton boton-chico" data-editar="${o.id}">Editar</button>` : ''}</td>
           </tr>`).join('')}
         </tbody>
       </table></div>`;
@@ -304,12 +363,35 @@ async function historial(zona, filtros, sigueVivo) {
     zona.querySelector('tbody').addEventListener('click', async (ev) => {
       const ver = ev.target.closest('[data-ver]');
       const borrar = ev.target.closest('[data-borrar]');
+      const editarBtn = ev.target.closest('[data-editar]');
+      const pesadaBtn = ev.target.closest('[data-pesada]');
+      const guardarPesada = ev.target.closest('[data-guardar-pesada]');
+      if (editarBtn) return alEditar(porId.get(editarBtn.dataset.editar));
+      if (pesadaBtn) {
+        const o = porId.get(pesadaBtn.dataset.pesada);
+        const celda = pesadaBtn.closest('td');
+        celda.innerHTML = `<span class="en-linea"><input type="number" class="celda-num" min="0.01" step="0.01" inputmode="decimal" value="${o.kg_reales ?? ''}" placeholder="Kg reales" aria-label="Kg reales de la pesada">
+          <button type="button" class="boton boton-chico boton-primario" data-guardar-pesada="${o.id}">Guardar</button></span>`;
+        celda.querySelector('input').focus();
+        return;
+      }
+      if (guardarPesada) {
+        const valor = numero(guardarPesada.closest('td').querySelector('input').value);
+        if (!valor || valor <= 0) return aviso('Captura los kg reales de la pesada.', 'error');
+        guardarPesada.disabled = true;
+        try {
+          await api.registrarPesada(Number(guardarPesada.dataset.guardarPesada), valor);
+          aviso(`Pesada registrada: ${fmt.kg(valor)}. La materia prima se recalculó.`);
+          recargar();
+        } catch (e) { aviso(e.message, 'error'); guardarPesada.disabled = false; }
+        return;
+      }
       if (ver) {
         const tr = ver.closest('tr');
         const siguiente = tr.nextElementSibling;
         if (siguiente?.classList.contains('detalle')) { siguiente.remove(); ver.setAttribute('aria-expanded', 'false'); return; }
         ver.setAttribute('aria-expanded', 'true');
-        tr.insertAdjacentHTML('afterend', `<tr class="detalle"><td colspan="9"><p class="cargando">Cargando…</p></td></tr>`);
+        tr.insertAdjacentHTML('afterend', `<tr class="detalle"><td colspan="10"><p class="cargando">Cargando…</p></td></tr>`);
         const celda = tr.nextElementSibling.firstElementChild;
         try {
           const [consumos, extras] = await Promise.all([api.consumosOrden(ver.dataset.ver), api.extrasOrden(ver.dataset.ver)]);
@@ -339,4 +421,12 @@ async function historial(zona, filtros, sigueVivo) {
       }
     });
   } catch (e) { if (sigueVivo()) errorEn(zona, e); }
+}
+
+function celdaPesada(o, puede) {
+  if (o.pendiente_pesada) {
+    return `<span class="etiqueta">Pendiente de pesada</span>${puede ? `<button type="button" class="boton boton-chico" data-pesada="${o.id}">Capturar</button>` : ''}`;
+  }
+  const d = Number(o.kg_diferencia);
+  return `${fmt.kg(o.kg_reales)}<small class="${d < 0 ? 'dif-menos' : d > 0 ? 'dif-mas' : ''}">${d > 0 ? '+' : ''}${fmt.kg(d)} (${fmt.pct(o.pct_diferencia)})</small>${puede ? `<button type="button" class="boton-enlace" data-pesada="${o.id}">Corregir</button>` : ''}`;
 }

@@ -19,9 +19,11 @@
     las llegadas y alertas de cobertura de sorgo, maíz y pasta de soya).
 11. Repite con `supabase/migrations/0008_orden_granja_destino.sql` (granja destino en las órdenes).
 12. Repite con `supabase/migrations/0009_orden_area.sql` (área de cada orden: cerdos, aves, ganado, borregos).
-13. Revisa en **Table Editor** que existan las tablas `granjas`, `materias_primas`, `formulas`.
+13. Repite con `supabase/migrations/0010_pesada_real.sql` (kg solicitados y kg reales de la pesada; edición de
+    órdenes por capturistas de planta).
+14. Revisa en **Table Editor** que existan las tablas `granjas`, `materias_primas`, `formulas`.
 
-Siempre en ese orden: 0001 → 0002 → seed → 0003 → 0004 → 0005 → 0006 → 0007 → 0008 → 0009.
+Siempre en ese orden: 0001 → 0002 → seed → 0003 → 0004 → 0005 → 0006 → 0007 → 0008 → 0009 → 0010.
 Si un archivo marca "already exists", ese archivo ya se había ejecutado: pasa al siguiente. Si una ejecución marca error, no sigas con la siguiente: copia el mensaje y compártelo.
 
 ## Qué queda cargado

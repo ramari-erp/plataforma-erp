@@ -89,14 +89,15 @@ export const api = {
       p_fecha: o.fecha, p_formula_id: o.formulaId, p_kg: o.kg,
       p_ingredientes: o.ingredientes, p_extras: o.extras, p_notas: o.notas,
       p_actualizar_formula: !!o.actualizarFormula, p_orden_id: o.ordenId ?? null,
-      p_granja_id: o.granjaId ?? null, p_area: o.area || null,
+      p_granja_id: o.granjaId ?? null, p_area: o.area || null, p_kg_reales: o.kgReales ?? null,
     }));
   },
-  async ordenes({ desde, hasta, granja, area } = {}) {
+  async ordenes({ desde, hasta, granja, area, pendientesPesada } = {}) {
     let q = sb.from('v_ordenes').select('*').order('fecha', { ascending: false }).order('id', { ascending: false }).limit(500);
     if (desde) q = q.gte('fecha', desde);
     if (hasta) q = q.lte('fecha', hasta);
     if (area) q = q.eq('area', area);
+    if (pendientesPesada) q = q.eq('pendiente_pesada', true);
     if (granja === 'ninguna') q = q.is('granja_id', null);
     else if (granja) q = q.eq('granja_id', granja);
     return ok(await q);
@@ -106,6 +107,12 @@ export const api = {
   },
   async extrasOrden(ordenId) {
     return ok(await sb.from('orden_extras').select('materia_prima_id,cantidad,unidad,nota').eq('orden_id', ordenId));
+  },
+  async ingredientesOrden(ordenId) {
+    return ok(await sb.from('v_orden_ingredientes').select('materia_prima_id,kg_por_tonelada').eq('orden_id', ordenId));
+  },
+  async registrarPesada(ordenId, kgReales) {
+    return ok(await sb.rpc('registrar_pesada', { p_orden_id: ordenId, p_kg_reales: kgReales }));
   },
   async eliminarOrden(ordenId) {
     return ok(await sb.from('ordenes_produccion').delete().eq('id', ordenId));

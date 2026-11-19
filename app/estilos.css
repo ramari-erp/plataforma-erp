@@ -179,3 +179,10 @@ tr.detalle > td { background: var(--fondo); white-space: normal; padding: 12px 1
 td.acciones { white-space: nowrap; }
 td.acciones .boton + .boton { margin-left: 6px; }
 #alertas-contratos .kpis { margin-bottom: 12px; }
+
+/* Pesada */
+.celda-pesada .boton { margin-left: 6px; }
+.celda-pesada small { display: block; }
+.boton-enlace { background: none; border: 0; padding: 0; color: var(--acento); font: inherit; font-size: .75rem; cursor: pointer; text-decoration: underline; }
+form.editando { border-color: var(--acento); box-shadow: 0 0 0 2px var(--acento-suave); }
+#btn-cancelar-edicion { margin-left: 8px; }

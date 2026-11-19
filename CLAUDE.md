@@ -22,6 +22,8 @@ Todo en español: tablas, columnas, interfaz y mensajes.
   recalculado en orden cronológico por `recalcular_mp()` (fechas atrasadas quedan bien).
 - La materia prima se descuenta al registrar la orden de producción. Cada orden guarda su copia de ingredientes
   (`orden_ingredientes`, modificable) + extras (`orden_extras`, kg/t o kg totales); se guarda con `guardar_orden()`.
+  `kg_solicitados` / `kg_reales` (pesada del total); `kg_producidos` = real si existe, si no solicitado (trigger).
+  Ingredientes se descuentan proporcional a `kg_producidos`. `registrar_pesada()` captura solo la pesada.
   La salida a granja descuenta producto terminado y se carga a granja, caseta y lote/banda
   (lote automático vía `caseta_lotes`).
 - Contratos de materia prima (`contratos_mp`): las llegadas se ligan con `contrato_id`; surtido/pendiente en
