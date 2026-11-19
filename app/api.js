@@ -45,6 +45,22 @@ export const api = {
   async materias() {
     return ok(await sb.from('materias_primas').select('id,nombre,categoria').eq('activa', true).order('nombre'));
   },
+  async gruposAlmacen() {
+    return ok(await sb.from('grupos_almacen').select('id,nombre').order('orden'));
+  },
+  // Cualquier capturista de planta; queda por revisar hasta que el administrador la revisa.
+  async crearMateriaPrima({ nombre, categoria, presentacion, grupoId }) {
+    const filas = ok(await sb.rpc('crear_materia_prima', {
+      p_nombre: nombre, p_categoria: categoria, p_presentacion: presentacion || null, p_grupo_almacen_id: grupoId || null,
+    }));
+    return filas[0];
+  },
+  async materiasCatalogo() {
+    return ok(await sb.from('v_materias_primas').select('*').order('revisada').order('nombre'));
+  },
+  async actualizarMateria(id, campos) {
+    return ok(await sb.from('materias_primas').update(campos).eq('id', id));
+  },
   async proveedores() {
     return ok(await sb.from('proveedores').select('id,nombre').eq('activo', true).order('nombre'));
   },

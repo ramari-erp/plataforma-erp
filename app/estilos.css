@@ -190,3 +190,11 @@ form.editando { border-color: var(--acento); box-shadow: 0 0 0 2px var(--acento-
 /* Granjas */
 .acceso.activo { border-color: var(--acento); box-shadow: 0 0 0 2px var(--acento-suave); }
 td.notas-celda { white-space: normal; min-width: 200px; color: var(--texto-suave); font-size: .85rem; }
+
+/* Materias primas */
+.parecidas { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 8px 0; font-size: .875rem; }
+.chip { font: inherit; font-size: .8rem; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--acento); background: var(--superficie); color: var(--acento); cursor: pointer; }
+#campo-nueva-mp .rejilla { margin: 8px 0; }
+#campo-nueva-mp .boton + .boton { margin-left: 6px; }
+#lista-mp input:not([type=checkbox]), #lista-mp select { padding: 5px 8px; font-size: .875rem; }
+#lista-mp td input[name=nombre] { min-width: 220px; }

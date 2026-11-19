@@ -20,7 +20,7 @@ export function pantallaInicio(cont) {
   cargando(zona);
   (async () => {
     try {
-      const [cap, exis, cob, contr, sinPesada] = await Promise.all([api.capacidad(), api.existencias(), api.cobertura(), api.contratos({ soloVigentes: true }), api.ordenes({ pendientesPesada: true, hasta: hoy(-1) })]);
+      const [cap, exis, cob, contr, sinPesada, catalogo] = await Promise.all([api.capacidad(), api.existencias(), api.cobertura(), api.contratos({ soloVigentes: true }), api.ordenes({ pendientesPesada: true, hasta: hoy(-1) }), sesion.esAdmin() ? api.materiasCatalogo() : []]);
       if (!vivo) return;
       const avisos = [
         ...cap.filter((g) => Number(g.ocupacion_pct) >= 90)
@@ -29,6 +29,8 @@ export function pantallaInicio(cont) {
           .map((x) => `Planta: <b>${esc(x.nombre)}</b> bajo el mínimo (${fmt.kg(x.existencia_kg)}).`),
       ];
       avisos.push(...alertasContratos(cob, contr).map((t) => `Contratos: ${t}`));
+      const porRevisar = catalogo.filter((m) => !m.revisada).length;
+      if (porRevisar) avisos.push(`Planta: <b>${porRevisar}</b> materia${porRevisar > 1 ? 's' : ''} prima${porRevisar > 1 ? 's' : ''} nueva${porRevisar > 1 ? 's' : ''} por revisar. <a href="#/planta/materias">Revisar</a>`);
       if (sinPesada.length) avisos.push(`Planta: <b>${sinPesada.length}</b> órdenes de días anteriores sin pesada real. <a href="#/planta/produccion">Capturar</a>`);
       const negativas = exis.filter((x) => Number(x.existencia_kg) < 0).length;
       if (negativas) avisos.push(`Planta: <b>${negativas}</b> materias primas con existencia negativa; falta el inventario de arranque o alguna llegada.`);

@@ -28,6 +28,8 @@ Todo en español: tablas, columnas, interfaz y mensajes.
   (lote automático vía `caseta_lotes`).
 - Contratos de materia prima (`contratos_mp`): las llegadas se ligan con `contrato_id`; surtido/pendiente en
   `v_contratos`; alertas por `materias_primas.requiere_contrato` en `v_cobertura_mp` (consumo últimos 30 días).
+- Materias primas nuevas: `crear_materia_prima()` (capturista de planta) las deja `revisada = false`; el
+  administrador las revisa en Planta → Materias primas. Duplicados por `nombre_normalizado()` (sin acentos).
 - Seguridad: RLS en todas las tablas con `aplicar_seguridad(tabla, modulo)`: leer = usuario activo,
   capturar = permiso del módulo en `perfil_modulos`, borrar = administrador.
 - Catálogos cerrados (fórmulas, casetas, materias primas); nada de nombres libres en movimientos.

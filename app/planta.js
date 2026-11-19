@@ -5,6 +5,7 @@ import { sesion } from './sesion.js';
 import { seccionInventario } from './inventario.js';
 import { seccionProduccion } from './produccion.js';
 import { seccionContratos, alertasContratos, precioContrato } from './contratos.js';
+import { miniFormularioMateria, seccionMaterias } from './materias.js';
 
 const SECCIONES = [
   { codigo: 'resumen', nombre: 'Resumen' },
@@ -13,6 +14,7 @@ const SECCIONES = [
   { codigo: 'contratos', nombre: 'Contratos' },
   { codigo: 'existencias', nombre: 'Existencias' },
   { codigo: 'inventario', nombre: 'Inventario físico' },
+  { codigo: 'materias', nombre: 'Materias primas' },
 ];
 
 export function pantallaPlanta(cont, seccion = 'resumen') {
@@ -29,6 +31,7 @@ export function pantallaPlanta(cont, seccion = 'resumen') {
   if (actual.codigo === 'inventario') return seccionInventario(zona);
   if (actual.codigo === 'produccion') return seccionProduccion(zona);
   if (actual.codigo === 'contratos') return seccionContratos(zona);
+  if (actual.codigo === 'materias') return seccionMaterias(zona);
   return existencias(zona);
 }
 
@@ -114,6 +117,7 @@ function llegadas(zona) {
       <div class="rejilla">
         <label>Fecha<input type="date" name="fecha" required></label>
         <label class="ancho2">Materia prima<select name="materia_prima_id" required><option value="">Cargando…</option></select></label>
+        <div class="ancho-total caja caja-info oculto" id="campo-nueva-mp"></div>
         <label class="ancho2">Proveedor<select name="proveedor_id"><option value="">Cargando…</option></select></label>
         <label class="ancho2" id="campo-contrato">Contrato<select name="contrato_id"><option value="">Elige primero la materia prima</option></select>
           <small class="ayuda" id="ayuda-contrato"></small></label>
@@ -178,11 +182,11 @@ function llegadas(zona) {
 
   (async () => {
     try {
-      const [materias, provs] = await Promise.all([api.materias(), puede ? api.proveedores() : []]);
+      const [materias, provs, grupos] = await Promise.all([api.materias(), puede ? api.proveedores() : [], puede ? api.gruposAlmacen() : []]);
       if (!vivo) return;
       const opcionesMp = materias.map((m) => `<option value="${m.id}">${esc(m.nombre)}</option>`).join('');
       filtros.materia.innerHTML = `<option value="">Todas</option>${opcionesMp}`;
-      if (puede) prepararFormulario(zona.querySelector('#form-llegada'), opcionesMp, provs, pintarHistorial);
+      if (puede) prepararFormulario(zona.querySelector('#form-llegada'), materias, provs, pintarHistorial, filtros, grupos);
     } catch (e) { aviso(e.message, 'error'); }
   })();
 
@@ -193,10 +197,24 @@ function llegadas(zona) {
   return () => { vivo = false; soltar(); };
 }
 
-function prepararFormulario(form, opcionesMp, provs, alGuardar) {
-  const NUEVO = '__nuevo__';
+function prepararFormulario(form, materias, provs, alGuardar, filtros, grupos) {
+  const NUEVO = '__nuevo__', NUEVA_MP = '__nueva_mp__';
   form.fecha.value = hoy();
-  form.materia_prima_id.innerHTML = `<option value="">Elige…</option>${opcionesMp}`;
+  const pintarMaterias = (elegida = '') => {
+    const op = materias.map((m) => `<option value="${m.id}">${esc(m.nombre)}</option>`).join('');
+    form.materia_prima_id.innerHTML = `<option value="">Elige…</option>${op}<option value="${NUEVA_MP}">+ Agregar materia prima nueva…</option>`;
+    form.materia_prima_id.value = elegida;
+    const filtroAntes = filtros.materia.value;
+    filtros.materia.innerHTML = `<option value="">Todas</option>${op}`;
+    filtros.materia.value = filtroAntes;
+  };
+  pintarMaterias();
+  const cajaNuevaMp = form.querySelector('#campo-nueva-mp');
+  const elegirMateria = (id) => {
+    cajaNuevaMp.classList.add('oculto'); cajaNuevaMp.innerHTML = '';
+    pintarMaterias(id ? String(id) : '');
+    form.materia_prima_id.dispatchEvent(new Event('change'));
+  };
   const pintarProvs = (lista, elegido = '') => {
     form.proveedor_id.innerHTML = `<option value="">Sin proveedor</option>${lista.map((p) => `<option value="${p.id}">${esc(p.nombre)}</option>`).join('')}<option value="${NUEVO}">+ Agregar proveedor nuevo…</option>`;
     form.proveedor_id.value = elegido;
@@ -249,6 +267,16 @@ function prepararFormulario(form, opcionesMp, provs, alGuardar) {
   };
   form.materia_prima_id.addEventListener('change', async () => {
     const materia = form.materia_prima_id.value;
+    if (materia === NUEVA_MP) {
+      cajaNuevaMp.classList.remove('oculto');
+      miniFormularioMateria(cajaNuevaMp, materias, grupos, {
+        alCrear: (m) => { materias.push(m); materias.sort((a, b) => a.nombre.localeCompare(b.nombre)); elegirMateria(m.id); },
+        alElegir: (id) => elegirMateria(id),
+        alCancelar: () => elegirMateria(null),
+      });
+      return;
+    }
+    if (!cajaNuevaMp.classList.contains('oculto')) { cajaNuevaMp.classList.add('oculto'); cajaNuevaMp.innerHTML = ''; }
     contratos = [];
     form.contrato_id.innerHTML = '<option value="">Compra libre (sin contrato)</option>';
     if (materia) {
@@ -281,6 +309,7 @@ function prepararFormulario(form, opcionesMp, provs, alGuardar) {
   form.addEventListener('submit', async (ev) => {
     ev.preventDefault();
     if (form.proveedor_id.value === NUEVO) return aviso('Agrega el proveedor nuevo o elige uno de la lista.', 'error');
+    if (form.materia_prima_id.value === NUEVA_MP) return aviso('Agrega la materia prima nueva o elige una de la lista.', 'error');
     const bruto = parseFloat(form.kg_bruto.value), tara = parseFloat(form.kg_tara.value);
     if (!isNaN(bruto) && !isNaN(tara) && Math.abs(bruto - tara - parseFloat(form.kg_neto.value)) > 0.5) {
       return aviso('El neto no coincide con bruto − tara. Revisa los kilos.', 'error');
