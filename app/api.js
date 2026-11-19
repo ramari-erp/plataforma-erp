@@ -33,6 +33,12 @@ export const api = {
   async granjas() {
     return ok(await sb.from('granjas').select('id,nombre,activa').order('nombre'));
   },
+  async casetas() {
+    return ok(await sb.from('v_casetas').select('*').order('granja').order('area').order('orden'));
+  },
+  async tolvas() {
+    return ok(await sb.from('tolvas').select('id,caseta_id,nombre,capacidad_kg,activa').order('nombre'));
+  },
   async granjaAreas() {
     return ok(await sb.from('v_granja_areas').select('granja_id,granja,activa,area').order('granja'));
   },

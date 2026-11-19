@@ -21,9 +21,12 @@
 12. Repite con `supabase/migrations/0009_orden_area.sql` (área de cada orden: cerdos, aves, ganado, borregos).
 13. Repite con `supabase/migrations/0010_pesada_real.sql` (kg solicitados y kg reales de la pesada; edición de
     órdenes por capturistas de planta).
-14. Revisa en **Table Editor** que existan las tablas `granjas`, `materias_primas`, `formulas`.
+14. Repite con `supabase/migrations/0011_casetas_secciones.sql` (sección, unidad de capacidad y notas en casetas).
+15. Repite con `supabase/datos/0001_casetas_tolvas.sql` (100 casetas y sus tolvas del archivo de capacidades).
+    Este archivo de datos se puede volver a correr: actualiza las casetas y reemplaza sus tolvas.
+16. Revisa en **Table Editor** que existan las tablas `granjas`, `materias_primas`, `formulas`.
 
-Siempre en ese orden: 0001 → 0002 → seed → 0003 → 0004 → 0005 → 0006 → 0007 → 0008 → 0009 → 0010.
+Siempre en ese orden: 0001 → 0002 → seed → 0003 → 0004 → 0005 → 0006 → 0007 → 0008 → 0009 → 0010 → 0011 → datos/0001.
 Si un archivo marca "already exists", ese archivo ya se había ejecutado: pasa al siguiente. Si una ejecución marca error, no sigas con la siguiente: copia el mensaje y compártelo.
 
 ## Qué queda cargado

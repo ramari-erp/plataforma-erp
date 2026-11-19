@@ -4,12 +4,14 @@ import { esc, aviso } from './ui.js';
 import { pantallaPlanta } from './planta.js';
 import { pantallaUsuarios } from './usuarios.js';
 import { pantallaInicio } from './inicio.js';
+import { pantallaGranjas } from './granjas.js';
 import { sesion } from './sesion.js';
 
 // Todos los módulos del plan. `listo` = ya construido; los demás muestran qué vendrá.
 const MODULOS = [
   { codigo: 'inicio',   nombre: 'Inicio',              listo: true },
   { codigo: 'planta',   nombre: 'Planta de alimentos', listo: true },
+  { codigo: 'granjas',  nombre: 'Granjas y casetas',   listo: true },
   { codigo: 'finanzas', nombre: 'Finanzas',            fase: 2, contenido: 'Compras y pagos diarios, saldos pendientes por proveedor y abonos.' },
   { codigo: 'cerdos',   nombre: 'Cerdos',              fase: 3, contenido: 'Resumen del año, sitio 1, sitio 2, sitio 3, reemplazos y gestaciones; inventario por caseta, tolvas y ventas.' },
   { codigo: 'aves',     nombre: 'Aves',                fase: 4, contenido: 'Huevo y kg vendidos, inventario por granja, 5 granjas de postura y 1 de crianza, tolvas con alarma.' },
@@ -110,6 +112,7 @@ function navegar() {
   if (mod.codigo === 'inicio') limpiarPantalla = pantallaInicio(cont);
   else if (mod.codigo === 'planta') limpiarPantalla = pantallaPlanta(cont, seccion);
   else if (mod.codigo === 'usuarios') limpiarPantalla = pantallaUsuarios(cont);
+  else if (mod.codigo === 'granjas') limpiarPantalla = pantallaGranjas(cont, seccion);
   else {
     cont.innerHTML = `
       <h1>${esc(mod.nombre)}</h1>

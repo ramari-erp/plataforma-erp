@@ -186,3 +186,7 @@ td.acciones .boton + .boton { margin-left: 6px; }
 .boton-enlace { background: none; border: 0; padding: 0; color: var(--acento); font: inherit; font-size: .75rem; cursor: pointer; text-decoration: underline; }
 form.editando { border-color: var(--acento); box-shadow: 0 0 0 2px var(--acento-suave); }
 #btn-cancelar-edicion { margin-left: 8px; }
+
+/* Granjas */
+.acceso.activo { border-color: var(--acento); box-shadow: 0 0 0 2px var(--acento-suave); }
+td.notas-celda { white-space: normal; min-width: 200px; color: var(--texto-suave); font-size: .85rem; }

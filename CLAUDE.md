@@ -37,6 +37,8 @@ PostgreSQL 16 está disponible en el contenedor. `supabase/tests/supabase_stub.s
 `auth.uid()` y el rol `authenticated`. `supabase/tests/cargar_todo.sh` carga todo en el orden de Supabase (0001, 0002, seed, 0003…); luego correr `supabase/tests/test_planta.sql`.
 Al agregar una migración, agregarla también a `cargar_todo.sh` y a `docs/instalar-base-de-datos.md`.
 Croquis y capacidades de la planta: `docs/planta/`.
+Casetas y tolvas: `scripts/generar_casetas.py` genera `supabase/datos/0001_casetas_tolvas.sql` desde CAPACIDADES.xlsx
+(una hoja por granja; capacidad de tolvas por caseta, repartida entre sus tolvas). Los archivos de `supabase/datos/` son repetibles.
 
 ## Plan
 Plan de acción del proyecto (fases 0–8, tareas, formatos): documento "Plan de acción — Plataforma ERP
