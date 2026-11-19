@@ -6,6 +6,7 @@ import { seccionInventario } from './inventario.js';
 import { seccionProduccion } from './produccion.js';
 import { seccionContratos, alertasContratos, precioContrato } from './contratos.js';
 import { miniFormularioMateria, seccionMaterias } from './materias.js';
+import { seccionFormulas } from './formulas.js';
 
 const SECCIONES = [
   { codigo: 'resumen', nombre: 'Resumen' },
@@ -14,6 +15,7 @@ const SECCIONES = [
   { codigo: 'contratos', nombre: 'Contratos' },
   { codigo: 'existencias', nombre: 'Existencias' },
   { codigo: 'inventario', nombre: 'Inventario físico' },
+  { codigo: 'formulas', nombre: 'Fórmulas' },
   { codigo: 'materias', nombre: 'Materias primas' },
 ];
 
@@ -32,6 +34,7 @@ export function pantallaPlanta(cont, seccion = 'resumen') {
   if (actual.codigo === 'produccion') return seccionProduccion(zona);
   if (actual.codigo === 'contratos') return seccionContratos(zona);
   if (actual.codigo === 'materias') return seccionMaterias(zona);
+  if (actual.codigo === 'formulas') return seccionFormulas(zona);
   return existencias(zona);
 }
 

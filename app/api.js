@@ -101,6 +101,20 @@ export const api = {
   async formulas() {
     return ok(await sb.from('formulas').select('id,nombre,especie').eq('activa', true).order('nombre'));
   },
+  // Cualquier capturista de planta; queda por revisar. copiarDe = id de la fórmula de la que copia ingredientes.
+  async crearFormula({ nombre, especie, etapa, copiarDe }) {
+    const filas = ok(await sb.rpc('crear_formula', { p_nombre: nombre, p_especie: especie, p_etapa: etapa || null, p_copiar_de: copiarDe || null }));
+    return filas[0];
+  },
+  async formulasCatalogo() {
+    return ok(await sb.from('v_formulas').select('*').order('revisada').order('nombre'));
+  },
+  async ingredientesFormula(formulaId) {
+    return ok(await sb.from('v_formula_ingredientes').select('*').eq('formula_id', formulaId).order('kg_por_tonelada', { ascending: false }));
+  },
+  async actualizarFormula(id, campos) {
+    return ok(await sb.from('formulas').update(campos).eq('id', id));
+  },
   async formulaIngredientes(formulaId) {
     return ok(await sb.from('formula_ingredientes')
       .select('materia_prima_id,kg_por_tonelada').eq('formula_id', formulaId));

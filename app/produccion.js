@@ -2,6 +2,7 @@
 import { api } from './api.js';
 import { esc, fmt, hoy, aviso, cargando, errorEn } from './ui.js';
 import { sesion } from './sesion.js';
+import { parecidas, normalizar } from './materias.js';
 
 const ESPECIES = { cerdos: 'Cerdos', aves: 'Aves', ganado: 'Ganado', borregos: 'Borregos', otro: 'Otros' };
 const AREAS = { cerdos: 'Cerdos', aves: 'Aves', ganado: 'Ganado', borregos: 'Borregos' };
@@ -50,10 +51,11 @@ export function seccionProduccion(zona) {
 
 function formularioOrden(zona, formulas, exis, granjas, granjaAreas, alGuardar) {
   const materias = new Map(exis.map((m) => [m.id, m]));
-  const opcionesFormula = Object.entries(ESPECIES).map(([esp, nombre]) => {
+  const NUEVA_F = '__nueva_formula__';
+  const opcionesFormula = () => Object.entries(ESPECIES).map(([esp, nombre]) => {
     const lista = formulas.filter((f) => (f.especie || 'otro') === esp);
     return lista.length ? `<optgroup label="${nombre}">${lista.map((f) => `<option value="${f.id}">${esc(f.nombre)}</option>`).join('')}</optgroup>` : '';
-  }).join('');
+  }).join('') + `<option value="${NUEVA_F}">+ Agregar fórmula nueva…</option>`;
   const ordenadas = [...materias.values()].sort((a, b) => a.nombre.localeCompare(b.nombre));
   const opcionesMp = (preferir) => {
     const primero = ordenadas.filter((m) => preferir(m)), resto = ordenadas.filter((m) => !preferir(m));
@@ -67,16 +69,18 @@ function formularioOrden(zona, formulas, exis, granjas, granjaAreas, alGuardar) 
       <h2 id="titulo-orden">Nueva orden de producción</h2>
       <div class="rejilla">
         <label>Fecha<input type="date" name="fecha" value="${hoy()}" required></label>
-        <label class="ancho2">Fórmula<select name="formula" required><option value="">Elige…</option>${opcionesFormula}</select></label>
+        <label class="ancho2">Fórmula<select name="formula" required><option value="">Elige…</option>${opcionesFormula()}</select></label>
         <label>Kg solicitados<input type="number" name="kg_solicitados" min="0.01" step="0.01" inputmode="decimal" required></label>
         <label>Kg reales (pesada)<input type="number" name="kg_reales" min="0.01" step="0.01" inputmode="decimal" placeholder="Si ya se pesó"></label>
         <label>Área<select name="area"><option value="">Elige…</option>${Object.entries(AREAS).map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select></label>
         <label>Granja destino<select name="granja"></select></label>
+        <div class="ancho-total caja caja-info oculto" id="campo-nueva-formula"></div>
       </div>
 
       <div id="bloque-ingredientes" class="oculto">
         <h3>Ingredientes de esta orden</h3>
-        <p class="nota">Vienen de la fórmula. Cambia los kg por tonelada si en esta orden se usó otra cantidad, quita o agrega ingredientes. Solo afecta a esta orden.</p>
+        <p class="nota oculto" id="nota-formula-nueva"><b>Fórmula nueva sin ingredientes:</b> agrégalos abajo; los de esta orden quedarán como su fórmula base.</p>
+        <p class="nota" id="nota-formula">Vienen de la fórmula. Cambia los kg por tonelada si en esta orden se usó otra cantidad, quita o agrega ingredientes. Solo afecta a esta orden.</p>
         <div class="tabla-scroll"><table class="tabla-captura">
           <thead><tr><th>Ingrediente</th><th class="num">Kg por tonelada</th><th class="num">Kg a usar</th><th class="num">Existencia</th><th></th></tr></thead>
           <tbody id="filas-ing"></tbody>
@@ -157,14 +161,15 @@ function formularioOrden(zona, formulas, exis, granjas, granjaAreas, alGuardar) 
 
   const actualizar = () => {
     const { t, kgSol, kgReal, ingredientes, extras } = leer();
-    let totalKgt = 0, modificada = ingredientes.length !== base.size;
+    const nueva = base.size === 0;   // fórmula sin base: lo de esta orden será su base
+    let totalKgt = 0, modificada = !nueva && ingredientes.length !== base.size;
     const necesidad = new Map();
     for (const i of ingredientes) {
       const kgt = i.kg_por_tonelada ?? 0;
       totalKgt += kgt;
       const usar = kgt * t;
       i.tr.querySelector('.usar').textContent = t ? kgFmt(usar) : '—';
-      const cambio = !base.has(i.materia_prima_id) || Math.abs(base.get(i.materia_prima_id) - kgt) > 0.00005;
+      const cambio = !nueva && (!base.has(i.materia_prima_id) || Math.abs(base.get(i.materia_prima_id) - kgt) > 0.00005);
       i.tr.querySelector('.etiqueta').classList.toggle('oculto', !cambio);
       if (cambio) modificada = true;
       necesidad.set(i.materia_prima_id, (necesidad.get(i.materia_prima_id) || 0) + usar);
@@ -206,13 +211,70 @@ function formularioOrden(zona, formulas, exis, granjas, granjaAreas, alGuardar) 
     if (!id) { bloque.classList.add('oculto'); return; }
     const ing = await api.formulaIngredientes(id);
     base = new Map(ing.map((i) => [i.materia_prima_id, Number(i.kg_por_tonelada)]));
+    form.querySelector('#nota-formula-nueva').classList.toggle('oculto', base.size > 0);
+    form.querySelector('#nota-formula').classList.toggle('oculto', base.size === 0);
     cuerpo.innerHTML = (usados || ing).slice()
       .sort((a, b) => Number(b.kg_por_tonelada) - Number(a.kg_por_tonelada))
       .map((i) => filaIngrediente(i.materia_prima_id, Number(i.kg_por_tonelada))).join('');
     bloque.classList.remove('oculto');
     actualizar();
   };
+  // ---- Fórmula nueva ----
+  const cajaNuevaF = form.querySelector('#campo-nueva-formula');
+  const cerrarNuevaF = () => { cajaNuevaF.classList.add('oculto'); cajaNuevaF.innerHTML = ''; };
+  const elegirFormula = (id) => {
+    cerrarNuevaF();
+    form.formula.innerHTML = `<option value="">Elige…</option>${opcionesFormula()}`;
+    form.formula.value = id ? String(id) : '';
+    form.formula.dispatchEvent(new Event('change'));
+  };
+  const abrirNuevaF = () => {
+    cajaNuevaF.classList.remove('oculto');
+    form.querySelector('#bloque-ingredientes').classList.add('oculto');
+    const opBase = Object.entries(ESPECIES).map(([esp, nombre]) => {
+      const lista = formulas.filter((f) => (f.especie || 'otro') === esp);
+      return lista.length ? `<optgroup label="${nombre}">${lista.map((f) => `<option value="${f.id}">${esc(f.nombre)}</option>`).join('')}</optgroup>` : '';
+    }).join('');
+    cajaNuevaF.innerHTML = `
+      <p><b>Fórmula nueva</b> — quedará por revisar por el administrador.</p>
+      <div class="rejilla">
+        <label class="ancho2">Nombre<input name="nf_nombre" maxlength="120" autocomplete="off"></label>
+        <label>Área<select name="nf_especie">${Object.entries(ESPECIES).map(([v, t]) => `<option value="${v}" ${v === form.area.value ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
+        <label>Etapa<input name="nf_etapa" maxlength="60" placeholder="Iniciador, finalizador…"></label>
+        <label class="ancho-total">Partir de<select name="nf_base"><option value="">Fórmula vacía (capturo los ingredientes)</option>${opBase}</select></label>
+      </div>
+      <div class="parecidas oculto" id="nf-parecidas"></div>
+      <button type="button" class="boton boton-chico boton-primario" id="nf-guardar">Agregar fórmula</button>
+      <button type="button" class="boton boton-chico" id="nf-cancelar">Cancelar</button>`;
+    const $ = (s) => cajaNuevaF.querySelector(s);
+    $('[name=nf_nombre]').focus();
+    $('[name=nf_nombre]').addEventListener('input', () => {
+      const lista = parecidas($('[name=nf_nombre]').value, formulas);
+      $('#nf-parecidas').classList.toggle('oculto', !lista.length);
+      $('#nf-parecidas').innerHTML = lista.length ? `<span>¿Es alguna de estas? </span>${lista.map((f) => `<button type="button" class="chip" data-elegir="${f.id}">${esc(f.nombre)}</button>`).join('')}` : '';
+    });
+    $('#nf-parecidas').addEventListener('click', (ev) => { const b = ev.target.closest('[data-elegir]'); if (b) elegirFormula(Number(b.dataset.elegir)); });
+    $('#nf-cancelar').addEventListener('click', () => elegirFormula(null));
+    cajaNuevaF.onkeydown = (ev) => { if (ev.key === 'Enter' && $('#nf-guardar')) { ev.preventDefault(); $('#nf-guardar').click(); } };
+    $('#nf-guardar').addEventListener('click', async () => {
+      const nombre = $('[name=nf_nombre]').value.trim();
+      if (!nombre) return $('[name=nf_nombre]').focus();
+      const exacta = formulas.find((f) => normalizar(f.nombre) === normalizar(nombre));
+      if (exacta) { aviso(`Ya existe: ${exacta.nombre}. Se eligió la existente.`); return elegirFormula(exacta.id); }
+      $('#nf-guardar').disabled = true;
+      try {
+        const f = await api.crearFormula({ nombre, especie: $('[name=nf_especie]').value, etapa: $('[name=nf_etapa]').value.trim(), copiarDe: Number($('[name=nf_base]').value) || null });
+        formulas.push(f);
+        formulas.sort((a, b) => a.nombre.localeCompare(b.nombre));
+        aviso(`Fórmula ${f.nombre} agregada${sesion.esAdmin() ? '' : ' (queda por revisar)'}.`);
+        elegirFormula(f.id);
+      } catch (e) { aviso(e.message, 'error'); $('#nf-guardar').disabled = false; }
+    });
+  };
+
   form.formula.addEventListener('change', async () => {
+    if (form.formula.value === NUEVA_F) return abrirNuevaF();
+    if (!cajaNuevaF.classList.contains('oculto')) cerrarNuevaF();
     const especie = formulas.find((f) => f.id === Number(form.formula.value))?.especie;
     if (AREAS[especie]) { form.area.value = especie; pintarGranjas(); }
     try { await cargarFormula(); } catch (e) { aviso(e.message, 'error'); }
@@ -289,6 +351,7 @@ function formularioOrden(zona, formulas, exis, granjas, granjaAreas, alGuardar) 
     ev.preventDefault();
     const { t, kgSol, kgReal, ingredientes, extras } = leer();
     if (!kgSol) return aviso('Captura los kg solicitados.', 'error');
+    if (form.formula.value === NUEVA_F) return aviso('Agrega la fórmula nueva o elige una de la lista.', 'error');
     if (!ingredientes.length) return aviso('La orden necesita al menos un ingrediente.', 'error');
     if (ingredientes.some((i) => !i.kg_por_tonelada)) return aviso('Hay un ingrediente sin kg por tonelada.', 'error');
     const incompletos = extras.filter((e) => (e.materia_prima_id && !e.cantidad) || (!e.materia_prima_id && e.cantidad));

@@ -30,6 +30,8 @@ Todo en español: tablas, columnas, interfaz y mensajes.
   `v_contratos`; alertas por `materias_primas.requiere_contrato` en `v_cobertura_mp` (consumo últimos 30 días).
 - Materias primas nuevas: `crear_materia_prima()` (capturista de planta) las deja `revisada = false`; el
   administrador las revisa en Planta → Materias primas. Duplicados por `nombre_normalizado()` (sin acentos).
+- Fórmulas nuevas: `crear_formula()` (copia de otra o vacía, `revisada = false`). Una fórmula sin ingredientes toma
+  los de su primera orden (`base_formula_vacia()` dentro de `guardar_orden()`). Revisión en Planta → Fórmulas.
 - Seguridad: RLS en todas las tablas con `aplicar_seguridad(tabla, modulo)`: leer = usuario activo,
   capturar = permiso del módulo en `perfil_modulos`, borrar = administrador.
 - Catálogos cerrados (fórmulas, casetas, materias primas); nada de nombres libres en movimientos.

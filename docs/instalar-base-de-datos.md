@@ -27,9 +27,11 @@
     Este archivo de datos se puede volver a correr: actualiza las casetas y reemplaza sus tolvas.
 17. Repite con `supabase/migrations/0013_materias_nuevas.sql` (alta de materias primas desde llegadas, con revisión
     del administrador).
-18. Revisa en **Table Editor** que existan las tablas `granjas`, `materias_primas`, `formulas`.
+18. Repite con `supabase/migrations/0014_formulas_nuevas.sql` (alta de fórmulas desde la orden de producción, con
+    revisión del administrador).
+19. Revisa en **Table Editor** que existan las tablas `granjas`, `materias_primas`, `formulas`.
 
-Siempre en ese orden: 0001 → 0002 → seed → 0003 → 0004 → 0005 → 0006 → 0007 → 0008 → 0009 → 0010 → 0011 → 0012 → datos/0001 → 0013.
+Siempre en ese orden: 0001 → 0002 → seed → 0003 → 0004 → 0005 → 0006 → 0007 → 0008 → 0009 → 0010 → 0011 → 0012 → datos/0001 → 0013 → 0014.
 Si un archivo marca "already exists", ese archivo ya se había ejecutado: pasa al siguiente. Si una ejecución marca error, no sigas con la siguiente: copia el mensaje y compártelo.
 
 ## Qué queda cargado
