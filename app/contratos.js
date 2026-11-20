@@ -42,19 +42,37 @@ export function seccionContratos(zona) {
     ${puede ? '<div id="zona-contrato"></div>' : ''}
     <h2>Contratos</h2>
     <form class="filtros" id="filtros-contratos">
-      <label>Mostrar<select name="ver"><option value="vigentes">Vigentes</option><option value="todos">Todos</option></select></label>
+      <label>Mostrar<select name="ver"><option value="vigentes">Vigentes (abiertos)</option><option value="terminados">Surtidos, cerrados o cancelados</option><option value="todos">Todos</option></select></label>
+      <label>Proveedor<select name="proveedor"><option value="">Todos</option></select></label>
+      <label>Materia prima<select name="materia"><option value="">Todas</option></select></label>
     </form>
+    <p class="nota" id="totales-contratos"></p>
     <div id="lista-contratos"></div>`;
   const lista = zona.querySelector('#lista-contratos');
   const filtros = zona.querySelector('#filtros-contratos');
 
   async function pintar() {
     try {
-      const [contratos, cobertura] = await Promise.all([
-        api.contratos({ soloVigentes: filtros.ver.value === 'vigentes' }), api.cobertura(),
-      ]);
+      const [todos, cobertura] = await Promise.all([api.contratos(), api.cobertura()]);
       if (!vivo) return;
-      const alertas = alertasContratos(cobertura, contratos);
+      // Opciones de los filtros con los proveedores y materias que tienen contratos
+      const opciones = (sel, pares, primera) => {
+        const antes = sel.value;
+        sel.innerHTML = `<option value="">${primera}</option>${[...new Map(pares).entries()].sort((a, b) => a[1].localeCompare(b[1])).map(([id, n]) => `<option value="${id}">${esc(n)}</option>`).join('')}`;
+        sel.value = antes;
+      };
+      opciones(filtros.proveedor, todos.map((c) => [String(c.proveedor_id), c.proveedor]), 'Todos');
+      opciones(filtros.materia, todos.map((c) => [String(c.materia_prima_id), c.materia_prima]), 'Todas');
+      const ver = filtros.ver.value;
+      const contratos = todos.filter((c) =>
+        (ver === 'todos' || (ver === 'vigentes' ? c.estado === 'abierto' && c.estado_actual !== 'surtido' : c.estado !== 'abierto' || c.estado_actual === 'surtido'))
+        && (!filtros.proveedor.value || String(c.proveedor_id) === filtros.proveedor.value)
+        && (!filtros.materia.value || String(c.materia_prima_id) === filtros.materia.value));
+      const suma = (k) => contratos.reduce((s, c) => s + Number(c[k] || 0), 0);
+      zona.querySelector('#totales-contratos').innerHTML = contratos.length
+        ? `${contratos.length} contrato${contratos.length === 1 ? '' : 's'} · contratado <b>${fmt.t(suma('kg_contratados'))}</b> · surtido <b>${fmt.t(suma('kg_surtidos'))}</b> · pendiente <b>${fmt.t(suma('kg_pendientes'))}</b>${suma('kg_excedente') ? ` · excedente ${fmt.t(suma('kg_excedente'))}` : ''}`
+        : '';
+      const alertas = alertasContratos(cobertura, todos);
       zona.querySelector('#alertas-contratos').innerHTML = `
         <div class="kpis">${cobertura.map((m) => `
           <div class="kpi"><span>${esc(m.nombre)}</span>
@@ -92,7 +110,7 @@ function formulario(zona, materias, provs, alGuardar) {
       <summary>Registrar contrato nuevo</summary>
       <form class="formulario" id="form-contrato" autocomplete="off">
         <div class="rejilla">
-          <label>Folio / número<input name="folio" maxlength="40"></label>
+          <label>Folio / número<input name="folio" maxlength="40"><small class="ayuda" id="ayuda-folio"></small></label>
           <label>Fecha del contrato<input type="date" name="fecha" value="${hoy()}" required></label>
           <label class="ancho2">Proveedor<select name="proveedor_id" required></select></label>
           <label class="ancho2 oculto" id="campo-prov-contrato">Nombre del proveedor nuevo
@@ -135,9 +153,29 @@ function formulario(zona, materias, provs, alGuardar) {
       ? `Valor del contrato: ${form.moneda.value === 'USD' ? `${(t * 1000 * p).toLocaleString('es-MX', { maximumFractionDigits: 2 })} USD` : fmt.dinero(t * 1000 * p)}` : '';
   };
   form.addEventListener('input', resumen);
+
+  // Folio repetido: aviso mientras se escribe y bloqueo al guardar.
+  let folioRepetido = null, espera = null;
+  const ayudaFolio = form.querySelector('#ayuda-folio');
+  const revisarFolio = async () => {
+    const f = form.folio.value.trim();
+    folioRepetido = null;
+    if (f) {
+      try {
+        const r = await api.buscarFolioContrato(f);
+        if (r.length && f === form.folio.value.trim()) folioRepetido = r[0];
+      } catch { /* la base de datos lo valida al guardar */ }
+    }
+    ayudaFolio.textContent = folioRepetido ? `Ya existe: ${folioRepetido.folio} (${folioRepetido.materia_prima}, ${folioRepetido.proveedor}). El folio no puede repetirse.` : '';
+    ayudaFolio.classList.toggle('ayuda-error', !!folioRepetido);
+  };
+  form.folio.addEventListener('input', () => { clearTimeout(espera); espera = setTimeout(revisarFolio, 350); });
+
   form.addEventListener('submit', async (ev) => {
     ev.preventDefault();
     if (form.proveedor_id.value === NUEVO) return aviso('Agrega el proveedor nuevo o elige uno.', 'error');
+    await revisarFolio();
+    if (folioRepetido) { form.folio.focus(); return aviso(`El folio ${folioRepetido.folio} ya existe. Usa otro folio.`, 'error'); }
     if (form.fecha_inicio.value && form.fecha_fin.value && form.fecha_fin.value < form.fecha_inicio.value) {
       return aviso('La fecha de entrega no puede ser anterior al inicio.', 'error');
     }

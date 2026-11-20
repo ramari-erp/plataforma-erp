@@ -89,6 +89,13 @@ export const api = {
     if (materia) q = q.eq('materia_prima_id', materia);
     return ok(await q);
   },
+  // Para avisar de folios repetidos antes de guardar (la base de datos también lo impide).
+  async buscarFolioContrato(folio) {
+    return ok(await sb.from('v_contratos').select('id,folio,proveedor,materia_prima').ilike('folio', folio.trim()).limit(1));
+  },
+  async buscarLlegadaPor(campo, valor) {   // campo: 'boleta' | 'factura'
+    return ok(await sb.from('v_llegadas').select('id,fecha,materia_prima,boleta,factura').ilike(campo, valor.trim()).limit(5));
+  },
   async crearContrato(datos) {
     return ok(await sb.from('contratos_mp').insert(datos).select('id').single());
   },

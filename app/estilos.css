@@ -198,3 +198,4 @@ td.notas-celda { white-space: normal; min-width: 200px; color: var(--texto-suave
 #campo-nueva-mp .boton + .boton { margin-left: 6px; }
 #lista-mp input:not([type=checkbox]), #lista-mp select { padding: 5px 8px; font-size: .875rem; }
 #lista-mp td input[name=nombre] { min-width: 220px; }
+.ayuda-error { color: var(--peligro); font-weight: 600; }

@@ -136,8 +136,8 @@ function llegadas(zona) {
         <label>Humedad %<input type="number" name="humedad_pct" min="0" max="100" step="0.01" inputmode="decimal"></label>
         <label>Precio $/kg (sin IVA, con flete)<input type="number" name="precio_kg" min="0" step="0.0001" inputmode="decimal" required></label>
         <label>Total<output name="total">$0.00</output></label>
-        <label>Factura / remisión<input name="factura" maxlength="60"></label>
-        <label>Boleta de báscula<input name="boleta" maxlength="60"></label>
+        <label>Factura / remisión<input name="factura" maxlength="60"><small class="ayuda" id="ayuda-factura"></small></label>
+        <label>Boleta de báscula<input name="boleta" maxlength="60"><small class="ayuda" id="ayuda-boleta"></small></label>
         <label class="casilla ancho-total"><input type="checkbox" name="precio_provisional"> Precio o tipo de cambio <b>provisional</b> (aún no se paga; se corrige después)</label>
         <label class="ancho-total">Notas<input name="notas" maxlength="300"></label>
       </div>
@@ -335,9 +335,37 @@ function prepararFormulario(form, materias, provs, alGuardar, filtros, grupos) {
   };
   form.addEventListener('input', recalcular);
 
+  // Boleta repetida = error; factura repetida = solo aviso (una factura puede cubrir varios viajes).
+  const repetidos = { boleta: [], factura: [] };
+  const esperas = {};
+  const revisarRepetido = async (campo) => {
+    const valor = form[campo].value.trim();
+    const ayuda = form.querySelector(`#ayuda-${campo}`);
+    repetidos[campo] = [];
+    if (valor) {
+      try {
+        const r = await api.buscarLlegadaPor(campo, valor);
+        if (valor === form[campo].value.trim()) repetidos[campo] = r.filter((l) => !editando || l.id !== editando.id);
+      } catch { /* la base de datos valida la boleta al guardar */ }
+    }
+    const otra = repetidos[campo][0];
+    ayuda.textContent = !otra ? '' : campo === 'boleta'
+      ? `La boleta ya está en la llegada del ${fmt.fecha(otra.fecha)} (${otra.materia_prima}). No puede repetirse.`
+      : `Esta factura ya está en ${repetidos[campo].length} llegada${repetidos[campo].length > 1 ? 's' : ''} (${fmt.fecha(otra.fecha)}, ${otra.materia_prima}). Si cubre varios viajes, está bien.`;
+    ayuda.classList.toggle('ayuda-error', !!otra && campo === 'boleta');
+    ayuda.classList.toggle('ayuda-alerta', !!otra && campo === 'factura');
+  };
+  ['boleta', 'factura'].forEach((campo) => form[campo].addEventListener('input', () => {
+    clearTimeout(esperas[campo]); esperas[campo] = setTimeout(() => revisarRepetido(campo), 350);
+  }));
+
   form.addEventListener('submit', async (ev) => {
     ev.preventDefault();
     if (form.proveedor_id.value === NUEVO) return aviso('Agrega el proveedor nuevo o elige uno de la lista.', 'error');
+    if (form.boleta.value.trim()) {
+      await revisarRepetido('boleta');
+      if (repetidos.boleta.length) { form.boleta.focus(); return aviso(`La boleta ${form.boleta.value.trim()} ya está registrada. No puede repetirse.`, 'error'); }
+    }
     if (form.materia_prima_id.value === NUEVA_MP) return aviso('Agrega la materia prima nueva o elige una de la lista.', 'error');
     const bruto = parseFloat(form.kg_bruto.value), tara = parseFloat(form.kg_tara.value);
     if (!isNaN(bruto) && !isNaN(tara) && Math.abs(bruto - tara - parseFloat(form.kg_neto.value)) > 0.5) {
@@ -401,6 +429,7 @@ function prepararFormulario(form, materias, provs, alGuardar, filtros, grupos) {
     btnEliminar.dataset.confirmar = '';
     btnEliminar.textContent = 'Eliminar llegada';
     form.classList.remove('editando');
+    ['boleta', 'factura'].forEach((c) => { repetidos[c] = []; form.querySelector(`#ayuda-${c}`).textContent = ''; });
     recalcular();
   }
   btnCancelar.addEventListener('click', limpiar);
