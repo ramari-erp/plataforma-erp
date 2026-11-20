@@ -112,11 +112,13 @@ function tarjetaCapacidad(g) {
 
 function llegadas(zona) {
   let vivo = true;
+  let editorLlegada = null;
+  let porIdLlegada = new Map();
   const puede = sesion.puedeCapturar('planta');
   zona.innerHTML = `
     ${puede ? `
     <form class="tarjeta formulario" id="form-llegada" autocomplete="off">
-      <h2>Registrar llegada</h2>
+      <h2 id="titulo-llegada">Registrar llegada</h2>
       <div class="rejilla">
         <label>Fecha<input type="date" name="fecha" required></label>
         <label class="ancho2">Materia prima<select name="materia_prima_id" required><option value="">Cargando…</option></select></label>
@@ -136,9 +138,12 @@ function llegadas(zona) {
         <label>Total<output name="total">$0.00</output></label>
         <label>Factura / remisión<input name="factura" maxlength="60"></label>
         <label>Boleta de báscula<input name="boleta" maxlength="60"></label>
+        <label class="casilla ancho-total"><input type="checkbox" name="precio_provisional"> Precio o tipo de cambio <b>provisional</b> (aún no se paga; se corrige después)</label>
         <label class="ancho-total">Notas<input name="notas" maxlength="300"></label>
       </div>
       <button class="boton boton-primario" type="submit">Guardar llegada</button>
+      <button class="boton oculto" type="button" id="btn-cancelar-llegada">Cancelar edición</button>
+      <button class="boton boton-peligro oculto" type="button" id="btn-eliminar-llegada">Eliminar llegada</button>
     </form>` : '<div class="caja caja-info">Puedes consultar el historial. Para capturar llegadas pide permiso de Planta al administrador.</div>'}
 
     <h2>Historial de llegadas</h2>
@@ -146,6 +151,7 @@ function llegadas(zona) {
       <label>Desde<input type="date" name="desde"></label>
       <label>Hasta<input type="date" name="hasta"></label>
       <label>Materia prima<select name="materia"><option value="">Todas</option></select></label>
+      <label class="casilla"><input type="checkbox" name="pendientes"> Solo con información pendiente</label>
     </form>
     <div id="historial"></div>`;
 
@@ -156,27 +162,31 @@ function llegadas(zona) {
 
   async function pintarHistorial() {
     try {
-      const filas = await api.llegadas({ desde: filtros.desde.value, hasta: filtros.hasta.value, materia: filtros.materia.value || null });
+      const filas = await api.llegadas({ desde: filtros.desde.value, hasta: filtros.hasta.value, materia: filtros.materia.value || null, pendientes: filtros.pendientes.checked });
+      porIdLlegada = new Map(filas.map((l) => [String(l.id), l]));
       if (!vivo) return;
-      if (!filas.length) { hist.innerHTML = '<p class="vacio">No hay llegadas en esas fechas.</p>'; return; }
+      if (!filas.length) { hist.innerHTML = `<p class="vacio">${filtros.pendientes.checked ? 'No hay llegadas con información pendiente en esas fechas.' : 'No hay llegadas en esas fechas.'}</p>`; return; }
+      const conPendientes = filas.filter((l) => (l.pendientes || []).length).length;
       const kg = filas.reduce((s, l) => s + Number(l.kg_neto), 0);
       const total = filas.reduce((s, l) => s + Number(l.total), 0);
       hist.innerHTML = `
-        <p class="nota">${filas.length} llegadas · ${fmt.t(kg)} · ${fmt.dinero(total)} · precio promedio ${fmt.precio(kg ? total / kg : 0)}</p>
+        <p class="nota">${filas.length} llegadas · ${fmt.t(kg)} · ${fmt.dinero(total)} · precio promedio ${fmt.precio(kg ? total / kg : 0)}${conPendientes ? ` · <b>${conPendientes} con información pendiente</b>` : ''}</p>
         <div class="tabla-scroll"><table>
-          <thead><tr><th>Fecha</th><th>Materia prima</th><th>Proveedor</th><th class="num">Kg neto</th><th class="num">Humedad</th><th class="num">Precio</th><th class="num">Total</th><th>Factura / boleta</th><th>Contrato</th><th>Capturó</th></tr></thead>
+          <thead><tr><th>Fecha</th><th>Materia prima</th><th>Proveedor</th><th class="num">Kg neto</th><th class="num">Humedad</th><th class="num">Precio</th><th class="num">Total</th><th>Factura / boleta</th><th>Contrato</th><th>Pendiente</th><th>Capturó</th>${puede ? '<th></th>' : ''}</tr></thead>
           <tbody>${filas.map((l) => `
-            <tr>
+            <tr class="${(l.pendientes || []).length ? 'fila-alerta' : ''}">
               <td>${fmt.fecha(l.fecha)}</td>
               <td>${esc(l.materia_prima)}</td>
               <td>${esc(l.proveedor || '—')}</td>
-              <td class="num">${fmt.kg(l.kg_neto)}</td>
+              <td class="num">${fmt.kg(l.kg_neto)}${Number(l.kg_excedente_contrato) > 0 ? `<small class="dif-mas">excedente ${fmt.kg(l.kg_excedente_contrato)}</small>` : ''}</td>
               <td class="num">${l.humedad_pct == null ? '—' : fmt.pct(l.humedad_pct)}</td>
-              <td class="num">${fmt.precio(l.precio_kg)}</td>
+              <td class="num">${fmt.precio(l.precio_kg)}${l.tipo_cambio ? `<small>TC ${Number(l.tipo_cambio).toFixed(4)}</small>` : ''}</td>
               <td class="num">${fmt.dinero(l.total)}</td>
               <td>${esc([l.factura, l.boleta].filter(Boolean).join(' / ') || '—')}</td>
               <td>${esc(l.contrato || '—')}</td>
-              <td title="${esc(fmt.hora(l.capturado_en))}">${esc(l.capturado_por || '—')}<small>${esc(fmt.hora(l.capturado_en))}</small></td>
+              <td>${(l.pendientes || []).map((p) => `<span class="etiqueta">${p === 'factura' ? 'Sin factura' : 'Precio provisional'}</span>`).join(' ') || '—'}</td>
+              <td title="${esc(fmt.hora(l.capturado_en))}">${esc(l.capturado_por || '—')}<small>${esc(fmt.hora(l.capturado_en))}</small>${l.modificado_por ? `<small>Modificó ${esc(l.modificado_por)}</small>` : ''}</td>
+              ${puede ? `<td><button type="button" class="boton boton-chico" data-editar-llegada="${l.id}">Editar</button></td>` : ''}
             </tr>`).join('')}
           </tbody>
         </table></div>`;
@@ -189,11 +199,16 @@ function llegadas(zona) {
       if (!vivo) return;
       const opcionesMp = materias.map((m) => `<option value="${m.id}">${esc(m.nombre)}</option>`).join('');
       filtros.materia.innerHTML = `<option value="">Todas</option>${opcionesMp}`;
-      if (puede) prepararFormulario(zona.querySelector('#form-llegada'), materias, provs, pintarHistorial, filtros, grupos);
+      if (puede) editorLlegada = prepararFormulario(zona.querySelector('#form-llegada'), materias, provs, pintarHistorial, filtros, grupos);
     } catch (e) { aviso(e.message, 'error'); }
   })();
 
   filtros.addEventListener('change', pintarHistorial);
+  hist.addEventListener('click', (ev) => {
+    const b = ev.target.closest('[data-editar-llegada]');
+    if (b && editorLlegada) editorLlegada.editar(porIdLlegada.get(b.dataset.editarLlegada));
+  });
+  if (location.hash.includes('pendientes')) filtros.pendientes.checked = true;
   cargando(hist);
   pintarHistorial();
   const soltar = api.enVivo('llegadas_mp', () => pintarHistorial());
@@ -246,6 +261,7 @@ function prepararFormulario(form, materias, provs, alGuardar, filtros, grupos) {
 
   // ---- Contrato: corte automático con cada llegada ----
   let contratos = [];
+  let editando = null;   // llegada que se está corrigiendo
   const campoTc = form.querySelector('#campo-tc');
   const ayudaContrato = form.querySelector('#ayuda-contrato');
   const contratoElegido = () => contratos.find((c) => String(c.id) === form.contrato_id.value);
@@ -254,9 +270,12 @@ function prepararFormulario(form, materias, provs, alGuardar, filtros, grupos) {
     campoTc.classList.toggle('oculto', !c || c.moneda !== 'USD');
     if (!c) { ayudaContrato.textContent = form.materia_prima_id.value ? 'Compra libre: no descuenta de ningún contrato.' : ''; return; }
     const kg = parseFloat(form.kg_neto.value) || 0;
-    const exceso = kg - Number(c.kg_pendientes);
-    ayudaContrato.textContent = `Pendiente ${fmt.t(c.kg_pendientes)} de ${fmt.t(c.kg_contratados)}`
-      + (exceso > 0.5 ? ` · esta llegada lo rebasa por ${fmt.kg(exceso)}` : kg ? ` · quedarán ${fmt.t(Number(c.kg_pendientes) - kg)}` : '');
+    // Al editar, lo que esta llegada ya surtía vuelve a contar como pendiente.
+    const yaSurtido = editando && editando.contrato_id === c.id ? Math.max(0, Number(editando.kg_neto) - Number(editando.kg_excedente_contrato || 0)) : 0;
+    const pendiente = Number(c.kg_pendientes) + yaSurtido;
+    const exceso = kg - pendiente;
+    ayudaContrato.textContent = `Pendiente ${fmt.t(pendiente)} de ${fmt.t(c.kg_contratados)}`
+      + (exceso > 0.5 ? ` · excedente de contrato: ${fmt.kg(exceso)} (se registra al precio del contrato)` : kg ? ` · quedarán ${fmt.t(pendiente - kg)}` : '');
     ayudaContrato.classList.toggle('ayuda-alerta', exceso > 0.5);
   };
   const aplicarContrato = () => {
@@ -267,6 +286,24 @@ function prepararFormulario(form, materias, provs, alGuardar, filtros, grupos) {
       else if (form.tipo_cambio.value) form.precio_kg.value = (Number(c.precio) * Number(form.tipo_cambio.value)).toFixed(4);
     }
     pintarAyudaContrato();
+  };
+  const cargarContratos = async (contratoFijo = null) => {
+    const materia = form.materia_prima_id.value;
+    contratos = [];
+    form.contrato_id.innerHTML = '<option value="">Compra libre (sin contrato)</option>';
+    if (materia) {
+      try {
+        contratos = (await api.contratos({ materia })).filter((c) => c.estado === 'abierto' || c.id === contratoFijo);
+        form.contrato_id.innerHTML += contratos.map((c) => `<option value="${c.id}">${esc(c.folio || `#${c.id}`)} · ${esc(c.proveedor)} · pendiente ${fmt.t(c.kg_pendientes)} · ${precioContrato(c)}${c.estado_actual === 'vencido' ? ' · VENCIDO' : ''}</option>`).join('');
+        if (contratoFijo) form.contrato_id.value = String(contratoFijo);
+        else {
+          // Si hay uno solo (o uno solo del proveedor elegido), se elige solo.
+          const delProv = contratos.filter((c) => String(c.proveedor_id) === form.proveedor_id.value && Number(c.kg_pendientes) > 0);
+          const candidato = delProv.length === 1 ? delProv[0] : contratos.length === 1 ? contratos[0] : null;
+          if (candidato) form.contrato_id.value = String(candidato.id);
+        }
+      } catch (e) { aviso(e.message, 'error'); }
+    }
   };
   form.materia_prima_id.addEventListener('change', async () => {
     const materia = form.materia_prima_id.value;
@@ -280,18 +317,7 @@ function prepararFormulario(form, materias, provs, alGuardar, filtros, grupos) {
       return;
     }
     if (!cajaNuevaMp.classList.contains('oculto')) { cajaNuevaMp.classList.add('oculto'); cajaNuevaMp.innerHTML = ''; }
-    contratos = [];
-    form.contrato_id.innerHTML = '<option value="">Compra libre (sin contrato)</option>';
-    if (materia) {
-      try {
-        contratos = await api.contratos({ soloVigentes: true, materia });
-        form.contrato_id.innerHTML += contratos.map((c) => `<option value="${c.id}">${esc(c.folio || `#${c.id}`)} · ${esc(c.proveedor)} · pendiente ${fmt.t(c.kg_pendientes)} · ${precioContrato(c)}${c.estado_actual === 'vencido' ? ' · VENCIDO' : ''}</option>`).join('');
-        // Si hay uno solo (o uno solo del proveedor elegido), se elige solo.
-        const delProv = contratos.filter((c) => String(c.proveedor_id) === form.proveedor_id.value && Number(c.kg_pendientes) > 0);
-        const candidato = delProv.length === 1 ? delProv[0] : contratos.length === 1 ? contratos[0] : null;
-        if (candidato) form.contrato_id.value = String(candidato.id);
-      } catch (e) { aviso(e.message, 'error'); }
-    }
+    await cargarContratos();
     aplicarContrato();
   });
   form.contrato_id.addEventListener('change', aplicarContrato);
@@ -318,7 +344,7 @@ function prepararFormulario(form, materias, provs, alGuardar, filtros, grupos) {
       return aviso('El neto no coincide con bruto − tara. Revisa los kilos.', 'error');
     }
     const c = contratoElegido();
-    if (c && c.moneda === 'USD' && !form.tipo_cambio.value) return aviso('El contrato es en dólares: captura el tipo de cambio.', 'error');
+    if (c && c.moneda === 'USD' && !form.tipo_cambio.value) return aviso('El contrato es en dólares: captura el tipo de cambio (si aún no se paga, uno estimado y marca "provisional").', 'error');
     const n = (v) => (v === '' ? null : Number(v));
     const datos = {
       contrato_id: c ? c.id : null,
@@ -334,26 +360,84 @@ function prepararFormulario(form, materias, provs, alGuardar, filtros, grupos) {
       factura: form.factura.value.trim() || null,
       boleta: form.boleta.value.trim() || null,
       notas: form.notas.value.trim() || null,
+      precio_provisional: form.precio_provisional.checked,
     };
     const boton = form.querySelector('button[type=submit]');
     boton.disabled = true; boton.textContent = 'Guardando…';
     try {
-      await api.crearLlegada(datos);
       const mp = form.materia_prima_id.selectedOptions[0]?.textContent;
-      aviso(`Llegada guardada: ${fmt.kg(datos.kg_neto)} de ${mp}.`);
-      const fecha = form.fecha.value;
-      form.reset();
-      form.fecha.value = fecha;
-      contratos = [];
-      form.contrato_id.innerHTML = '<option value="">Elige primero la materia prima</option>';
-      recalcular();
+      if (editando) {
+        await api.actualizarLlegada(editando.id, datos);
+        aviso(`Llegada corregida: ${fmt.kg(datos.kg_neto)} de ${mp}. Existencias y costos recalculados.`);
+      } else {
+        await api.crearLlegada(datos);
+        const faltan = [!datos.factura && 'factura', datos.precio_provisional && 'precio definitivo'].filter(Boolean);
+        aviso(`Llegada guardada: ${fmt.kg(datos.kg_neto)} de ${mp}.${faltan.length ? ` Queda pendiente: ${faltan.join(' y ')}.` : ''}`);
+      }
+      limpiar();
       alGuardar();
     } catch (e) {
       aviso(e.message, 'error');
     } finally {
-      boton.disabled = false; boton.textContent = 'Guardar llegada';
+      boton.disabled = false; boton.textContent = editando ? 'Guardar cambios' : 'Guardar llegada';
     }
   });
+
+  // ---- Edición ----
+  const titulo = form.querySelector('#titulo-llegada');
+  const btnCancelar = form.querySelector('#btn-cancelar-llegada');
+  const btnEliminar = form.querySelector('#btn-eliminar-llegada');
+  function limpiar() {
+    const fecha = form.fecha.value;
+    form.reset();
+    form.fecha.value = editando ? hoy() : fecha;
+    editando = null;
+    contratos = [];
+    form.contrato_id.innerHTML = '<option value="">Elige primero la materia prima</option>';
+    titulo.textContent = 'Registrar llegada';
+    form.querySelector('button[type=submit]').textContent = 'Guardar llegada';
+    btnCancelar.classList.add('oculto');
+    btnEliminar.classList.add('oculto');
+    btnEliminar.dataset.confirmar = '';
+    btnEliminar.textContent = 'Eliminar llegada';
+    form.classList.remove('editando');
+    recalcular();
+  }
+  btnCancelar.addEventListener('click', limpiar);
+  btnEliminar.addEventListener('click', async () => {
+    if (btnEliminar.dataset.confirmar !== 'si') { btnEliminar.dataset.confirmar = 'si'; btnEliminar.textContent = 'Confirmar: eliminar llegada'; return; }
+    try {
+      await api.eliminarLlegada(editando.id);
+      aviso('Llegada eliminada; existencias y costos recalculados.');
+      limpiar();
+      alGuardar();
+    } catch (e) { aviso(e.message, 'error'); }
+  });
+
+  async function editar(l) {
+    editando = l;
+    form.fecha.value = l.fecha;
+    if (!materias.some((m) => m.id === l.materia_prima_id)) materias.push({ id: l.materia_prima_id, nombre: l.materia_prima });
+    pintarMaterias(String(l.materia_prima_id));
+    if (l.proveedor_id && !provs.some((p) => p.id === l.proveedor_id)) { provs.push({ id: l.proveedor_id, nombre: l.proveedor }); }
+    pintarProvs(provs, l.proveedor_id ? String(l.proveedor_id) : '');
+    await cargarContratos(l.contrato_id);
+    form.tipo_cambio.value = l.tipo_cambio ?? '';
+    const v = (x) => (x == null ? '' : x);
+    form.kg_bruto.value = v(l.kg_bruto); form.kg_tara.value = v(l.kg_tara); form.kg_neto.value = v(l.kg_neto);
+    form.humedad_pct.value = v(l.humedad_pct); form.precio_kg.value = v(l.precio_kg);
+    form.factura.value = v(l.factura); form.boleta.value = v(l.boleta); form.notas.value = v(l.notas);
+    form.precio_provisional.checked = !!l.precio_provisional;
+    pintarAyudaContrato();
+    recalcular();
+    titulo.textContent = `Editar llegada: ${l.materia_prima}, ${fmt.fecha(l.fecha)}`;
+    form.querySelector('button[type=submit]').textContent = 'Guardar cambios';
+    btnCancelar.classList.remove('oculto');
+    btnEliminar.classList.toggle('oculto', !sesion.esAdmin());
+    form.classList.add('editando');
+    form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  return { editar };
 }
 
 // ---------- Existencias ----------

@@ -71,13 +71,14 @@ export const api = {
   // Planta
   async capacidad() { return ok(await sb.from('v_capacidad_planta').select('*').order('orden')); },
   async existencias() { return ok(await sb.from('v_existencias_mp').select('*').order('nombre')); },
-  async llegadas({ desde, hasta, materia, contrato } = {}) {
+  async llegadas({ desde, hasta, materia, contrato, pendientes } = {}) {
     let q = sb.from('v_llegadas').select('*')
       .order('fecha', { ascending: false }).order('id', { ascending: false }).limit(500);
     if (desde) q = q.gte('fecha', desde);
     if (hasta) q = q.lte('fecha', hasta);
     if (materia) q = q.eq('materia_prima_id', materia);
     if (contrato) q = q.eq('contrato_id', contrato);
+    if (pendientes) q = q.neq('pendientes', '{}');
     return ok(await q);
   },
 
@@ -95,6 +96,12 @@ export const api = {
     return ok(await sb.from('contratos_mp').update({ estado }).eq('id', id));
   },
   async cobertura() { return ok(await sb.from('v_cobertura_mp').select('*').order('nombre')); },
+  async actualizarLlegada(id, datos) {
+    return ok(await sb.from('llegadas_mp').update(datos).eq('id', id));
+  },
+  async eliminarLlegada(id) {
+    return ok(await sb.from('llegadas_mp').delete().eq('id', id));
+  },
   async crearLlegada(datos) {
     return ok(await sb.from('llegadas_mp').insert(datos).select('id').single());
   },

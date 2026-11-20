@@ -178,7 +178,7 @@ function tabla(zona, contratos, alCambiar) {
           <td>${esc(c.materia_prima)}</td>
           <td class="num">${fmt.t(c.kg_contratados)}</td>
           <td class="celda-progreso"><div class="barra-cap" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}" aria-label="Surtido de ${esc(c.folio || c.id)}"><div style="width:${pct}%"></div></div>
-            <small>${fmt.t(c.kg_surtidos)} · ${fmt.pct(c.pct_surtido)} · ${c.llegadas} llegada${Number(c.llegadas) === 1 ? '' : 's'}</small></td>
+            <small>${fmt.t(c.kg_surtidos)} · ${fmt.pct(c.pct_surtido)} · ${c.llegadas} llegada${Number(c.llegadas) === 1 ? '' : 's'}</small>${Number(c.kg_excedente) > 0 ? `<small class="dif-mas">excedente ${fmt.t(c.kg_excedente)}</small>` : ''}</td>
           <td class="num">${fmt.t(c.kg_pendientes)}</td>
           <td class="num">${precioContrato(c)}</td>
           <td>${c.fecha_fin ? fmt.fecha(c.fecha_fin) : '—'}${c.estado === 'abierto' && c.dias_para_vencer != null && Number(c.kg_pendientes) > 0 ? `<small>${Number(c.dias_para_vencer) >= 0 ? `faltan ${c.dias_para_vencer} días` : `hace ${-c.dias_para_vencer} días`}</small>` : ''}</td>
