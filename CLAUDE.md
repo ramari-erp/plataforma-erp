@@ -30,6 +30,9 @@ Todo en español: tablas, columnas, interfaz y mensajes.
   `v_contratos`; alertas por `materias_primas.requiere_contrato` en `v_cobertura_mp` (consumo últimos 30 días).
 - Llegadas: editables por planta (`modificado_por`); `precio_provisional` + sin factura = `pendientes` en `v_llegadas`;
   `kg_excedente_contrato` (ventana por contrato) y `v_contratos.kg_excedente`.
+- Pesada conjunta (`pesadas_conjuntas`, `registrar_pesada_conjunta()`): el total se reparte entre órdenes en proporción
+  a `kg_solicitados`. Nota de entrada (`notas_entrada`, `crear_nota_entrada()`): una llegada por producto con `nota_id`;
+  pesos de la nota, o ajustados a báscula si `p_ajustar`. `factura_nota()` aplica la factura a toda la nota.
 - Materias primas nuevas: `crear_materia_prima()` (capturista de planta) las deja `revisada = false`; el
   administrador las revisa en Planta → Materias primas. Duplicados por `nombre_normalizado()` (sin acentos).
 - Fórmulas nuevas: `crear_formula()` (copia de otra o vacía, `revisada = false`). Una fórmula sin ingredientes toma

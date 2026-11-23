@@ -392,6 +392,10 @@ function formularioOrden(zona, formulas, exis, granjas, granjaAreas, alGuardar) 
 
 // ---------- Historial ----------
 
+// Selección para la pesada conjunta (se conserva al recargar el historial).
+const seleccion = new Map();
+let pesadaCorrigiendo = null;
+
 async function historial(zona, filtros, sigueVivo, alEditar, recargar) {
   try {
     const filas = await api.ordenes({ desde: filtros.desde.value, hasta: filtros.hasta.value, granja: filtros.granja.value || null, area: filtros.area.value || null });
@@ -403,12 +407,15 @@ async function historial(zona, filtros, sigueVivo, alEditar, recargar) {
     const puede = sesion.puedeCapturar('planta');
     const pendientes = filas.filter((o) => o.pendiente_pesada).length;
     const porId = new Map(filas.map((o) => [String(o.id), o]));
+    const columnas = puede ? 11 : 10;
     zona.innerHTML = `
+      ${puede ? `<div class="caja caja-info barra-pesada oculto" id="barra-pesada"></div>` : ''}
       <p class="nota">${filas.length} órdenes · ${fmt.t(kg)} · costo de materia prima ${fmt.dinero(costo)} (${fmt.precio(kg ? costo / kg : 0)})${pendientes ? ` · <b>${pendientes} pendiente${pendientes > 1 ? 's' : ''} de pesada</b>` : ''}</p>
       <div class="tabla-scroll"><table>
-        <thead><tr><th>Fecha</th><th>Fórmula</th><th>Destino</th><th class="num">Solicitado</th><th class="num">Pesada real</th><th class="num">Costo/kg</th><th class="num">Costo MP</th><th>Cambios</th><th>Capturó</th><th></th></tr></thead>
+        <thead><tr>${puede ? '<th title="Selecciona las órdenes que se cargaron y pesaron juntas">Pesar<br>juntas</th>' : ''}<th>Fecha</th><th>Fórmula</th><th>Destino</th><th class="num">Solicitado</th><th class="num">Pesada real</th><th class="num">Costo/kg</th><th class="num">Costo MP</th><th>Cambios</th><th>Capturó</th><th></th></tr></thead>
         <tbody>${filas.map((o) => `
           <tr data-orden="${o.id}">
+            ${puede ? `<td><input type="checkbox" data-sel="${o.id}" aria-label="Pesar junto con otras: ${esc(o.formula)}" ${seleccion.has(o.id) ? 'checked' : ''}></td>` : ''}
             <td>${fmt.fecha(o.fecha)}</td>
             <td>${esc(o.formula)}${o.notas ? `<small>${esc(o.notas)}</small>` : ''}</td>
             <td>${esc(o.granja || '—')}<small>${esc(AREAS[o.area] || 'Sin área')}</small></td>
@@ -423,7 +430,78 @@ async function historial(zona, filtros, sigueVivo, alEditar, recargar) {
         </tbody>
       </table></div>`;
 
+    // ---- Pesada conjunta: varias órdenes pesadas juntas ----
+    const barra = zona.querySelector('#barra-pesada');
+    const pintarBarra = () => {
+      if (!barra) return;
+      const ords = [...seleccion.values()];
+      barra.classList.toggle('oculto', ords.length === 0);
+      if (!ords.length) return;
+      const sol = ords.reduce((s, o) => s + Number(o.kg_solicitados), 0);
+      const total = numero(barra.querySelector('[name=kg_total]')?.value);
+      const reparto = ords.map((o) => `<li>${esc(o.formula)}: ordenado ${fmt.kg(o.kg_solicitados)}${total ? ` → <b>${fmt.kg(Math.round(o.kg_solicitados * total / sol * 100) / 100)}</b>` : ''}</li>`).join('');
+      const totalAntes = barra.querySelector('[name=kg_total]')?.value ?? (pesadaCorrigiendo ? pesadaCorrigiendo.total : '');
+      barra.innerHTML = `
+        <p><b>${pesadaCorrigiendo ? 'Corregir pesada conjunta' : 'Pesada conjunta'}:</b> ${ords.length} órden${ords.length === 1 ? '' : 'es'} · ordenado ${fmt.kg(sol)}${ords.length < 2 ? ' — elige al menos otra orden' : ''}</p>
+        <ul class="lista-reparto">${reparto}</ul>
+        <div class="en-linea">
+          <input type="number" name="kg_total" class="celda-num" min="0.01" step="0.01" inputmode="decimal" placeholder="Total báscula (kg)" aria-label="Total de la báscula en kg" value="${totalAntes}">
+          <button type="button" class="boton boton-chico boton-primario" data-registrar-conjunta ${ords.length < 2 ? 'disabled' : ''}>${pesadaCorrigiendo ? 'Guardar corrección' : 'Registrar pesada conjunta'}</button>
+          <button type="button" class="boton boton-chico" data-cancelar-conjunta>Cancelar</button>
+        </div>
+        ${total && sol ? `<p class="nota">Diferencia ${total - sol > 0 ? '+' : ''}${fmt.kg(total - sol)} (${fmt.pct(100 * (total - sol) / sol)}), repartida en proporción a lo ordenado.</p>` : ''}`;
+    };
+    if (barra) {
+      barra.addEventListener('input', (ev) => {
+        if (ev.target.name !== 'kg_total') return;
+        const pos = ev.target.selectionStart;
+        pintarBarra();
+        const inp = barra.querySelector('[name=kg_total]'); inp.focus();
+        try { inp.setSelectionRange(pos, pos); } catch { /* number inputs */ }
+      });
+      barra.addEventListener('click', async (ev) => {
+        if (ev.target.closest('[data-cancelar-conjunta]')) {
+          seleccion.clear(); pesadaCorrigiendo = null;
+          zona.querySelectorAll('[data-sel]').forEach((c) => { c.checked = false; });
+          return pintarBarra();
+        }
+        const btn = ev.target.closest('[data-registrar-conjunta]');
+        if (!btn) return;
+        const total = numero(barra.querySelector('[name=kg_total]').value);
+        if (!total || total <= 0) return aviso('Captura el total de la báscula.', 'error');
+        btn.disabled = true;
+        try {
+          await api.registrarPesadaConjunta([...seleccion.keys()], total, pesadaCorrigiendo?.id ?? null);
+          aviso(`Pesada conjunta registrada: ${fmt.kg(total)} repartidos entre ${seleccion.size} órdenes. La materia prima se recalculó.`);
+          seleccion.clear(); pesadaCorrigiendo = null;
+          recargar();
+        } catch (e) { aviso(e.message, 'error'); btn.disabled = false; }
+      });
+      pintarBarra();
+    }
+    zona.querySelector('tbody').addEventListener('change', (ev) => {
+      const c = ev.target.closest('[data-sel]');
+      if (!c) return;
+      const o = porId.get(c.dataset.sel);
+      if (c.checked) seleccion.set(o.id, o); else seleccion.delete(o.id);
+      pintarBarra();
+    });
+
     zona.querySelector('tbody').addEventListener('click', async (ev) => {
+      const conjunta = ev.target.closest('[data-corregir-conjunta]');
+      if (conjunta) {
+        try {
+          const grupo = await api.ordenes({ pesadaConjunta: conjunta.dataset.corregirConjunta });
+          seleccion.clear();
+          grupo.forEach((o) => seleccion.set(o.id, o));
+          pesadaCorrigiendo = { id: Number(conjunta.dataset.corregirConjunta), total: grupo[0]?.pesada_kg_total ?? '' };
+          zona.querySelectorAll('[data-sel]').forEach((c) => { c.checked = seleccion.has(Number(c.dataset.sel)); });
+          if (barra) barra.innerHTML = '';
+          pintarBarra();
+          barra?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        } catch (e) { aviso(e.message, 'error'); }
+        return;
+      }
       const ver = ev.target.closest('[data-ver]');
       const borrar = ev.target.closest('[data-borrar]');
       const editarBtn = ev.target.closest('[data-editar]');
@@ -454,7 +532,7 @@ async function historial(zona, filtros, sigueVivo, alEditar, recargar) {
         const siguiente = tr.nextElementSibling;
         if (siguiente?.classList.contains('detalle')) { siguiente.remove(); ver.setAttribute('aria-expanded', 'false'); return; }
         ver.setAttribute('aria-expanded', 'true');
-        tr.insertAdjacentHTML('afterend', `<tr class="detalle"><td colspan="10"><p class="cargando">Cargando…</p></td></tr>`);
+        tr.insertAdjacentHTML('afterend', `<tr class="detalle"><td colspan="${columnas}"><p class="cargando">Cargando…</p></td></tr>`);
         const celda = tr.nextElementSibling.firstElementChild;
         try {
           const [consumos, extras] = await Promise.all([api.consumosOrden(ver.dataset.ver), api.extrasOrden(ver.dataset.ver)]);
@@ -479,7 +557,7 @@ async function historial(zona, filtros, sigueVivo, alEditar, recargar) {
         try {
           await api.eliminarOrden(borrar.dataset.borrar);
           aviso('Orden eliminada; la materia prima regresó al inventario.');
-          historial(zona, filtros, sigueVivo);
+          recargar();
         } catch (e) { aviso(e.message, 'error'); borrar.disabled = false; }
       }
     });
@@ -491,5 +569,8 @@ function celdaPesada(o, puede) {
     return `<span class="etiqueta">Pendiente de pesada</span>${puede ? `<button type="button" class="boton boton-chico" data-pesada="${o.id}">Capturar</button>` : ''}`;
   }
   const d = Number(o.kg_diferencia);
-  return `${fmt.kg(o.kg_reales)}<small class="${d < 0 ? 'dif-menos' : d > 0 ? 'dif-mas' : ''}">${d > 0 ? '+' : ''}${fmt.kg(d)} (${fmt.pct(o.pct_diferencia)})</small>${puede ? `<button type="button" class="boton-enlace" data-pesada="${o.id}">Corregir</button>` : ''}`;
+  const conjunta = o.pesada_conjunta_id
+    ? `<small>Pesada conjunta: ${fmt.kg(o.pesada_kg_total)} de ${o.pesada_ordenes} alimentos</small>${puede ? `<button type="button" class="boton-enlace" data-corregir-conjunta="${o.pesada_conjunta_id}">Corregir conjunta</button>` : ''}`
+    : (puede ? `<button type="button" class="boton-enlace" data-pesada="${o.id}">Corregir</button>` : '');
+  return `${fmt.kg(o.kg_reales)}<small class="${d < 0 ? 'dif-menos' : d > 0 ? 'dif-mas' : ''}">${d > 0 ? '+' : ''}${fmt.kg(d)} (${fmt.pct(o.pct_diferencia)})</small>${conjunta}`;
 }

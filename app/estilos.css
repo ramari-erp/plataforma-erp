@@ -199,3 +199,16 @@ td.notas-celda { white-space: normal; min-width: 200px; color: var(--texto-suave
 #lista-mp input:not([type=checkbox]), #lista-mp select { padding: 5px 8px; font-size: .875rem; }
 #lista-mp td input[name=nombre] { min-width: 220px; }
 .ayuda-error { color: var(--peligro); font-weight: 600; }
+
+/* Pesada conjunta */
+.barra-pesada { position: sticky; top: 0; z-index: 2; }
+.barra-pesada p { margin: 4px 0; }
+.lista-reparto { margin: 4px 0 8px; padding-left: 20px; font-size: .875rem; }
+.barra-pesada .en-linea { flex-wrap: wrap; align-items: center; }
+.barra-pesada input[name=kg_total] { width: 12em; }
+
+/* Nota con varios productos */
+.selector-modo { display: flex; flex-wrap: wrap; gap: 8px 24px; margin: 0 0 12px; padding: 10px 14px; background: var(--superficie); border: 1px solid var(--borde); border-radius: var(--radio); }
+#form-nota .tabla-captura select { min-width: 220px; }
+#form-nota #btn-renglon { margin: 10px 0; }
+#form-nota .casilla { margin: 8px 0; }

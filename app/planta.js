@@ -7,6 +7,7 @@ import { seccionProduccion } from './produccion.js';
 import { seccionContratos, alertasContratos, precioContrato } from './contratos.js';
 import { miniFormularioMateria, seccionMaterias } from './materias.js';
 import { seccionFormulas } from './formulas.js';
+import { formularioNota } from './notas.js';
 
 const SECCIONES = [
   { codigo: 'resumen', nombre: 'Resumen' },
@@ -117,6 +118,11 @@ function llegadas(zona) {
   const puede = sesion.puedeCapturar('planta');
   zona.innerHTML = `
     ${puede ? `
+    <div class="selector-modo" role="radiogroup" aria-label="Tipo de captura">
+      <label class="casilla"><input type="radio" name="modo-llegada" value="uno" checked> Un producto</label>
+      <label class="casilla"><input type="radio" name="modo-llegada" value="nota"> Nota con varios productos (encostalado)</label>
+    </div>
+    <div id="zona-nota" class="oculto"></div>
     <form class="tarjeta formulario" id="form-llegada" autocomplete="off">
       <h2 id="titulo-llegada">Registrar llegada</h2>
       <div class="rejilla">
@@ -182,7 +188,7 @@ function llegadas(zona) {
               <td class="num">${l.humedad_pct == null ? '—' : fmt.pct(l.humedad_pct)}</td>
               <td class="num">${fmt.precio(l.precio_kg)}${l.tipo_cambio ? `<small>TC ${Number(l.tipo_cambio).toFixed(4)}</small>` : ''}</td>
               <td class="num">${fmt.dinero(l.total)}</td>
-              <td>${esc([l.factura, l.boleta].filter(Boolean).join(' / ') || '—')}</td>
+              <td>${esc([l.factura, l.boleta].filter(Boolean).join(' / ') || '—')}${l.nota_id ? `<small>Nota ${esc(l.nota_folio || `#${l.nota_id}`)} · ${l.nota_productos} producto${Number(l.nota_productos) === 1 ? '' : 's'}${l.nota_kg_bascula ? ` · báscula ${fmt.kg(l.nota_kg_bascula)}` : ''}</small>` : ''}</td>
               <td>${esc(l.contrato || '—')}</td>
               <td>${(l.pendientes || []).map((p) => `<span class="etiqueta">${p === 'factura' ? 'Sin factura' : 'Precio provisional'}</span>`).join(' ') || '—'}</td>
               <td title="${esc(fmt.hora(l.capturado_en))}">${esc(l.capturado_por || '—')}<small>${esc(fmt.hora(l.capturado_en))}</small>${l.modificado_por ? `<small>Modificó ${esc(l.modificado_por)}</small>` : ''}</td>
@@ -199,7 +205,15 @@ function llegadas(zona) {
       if (!vivo) return;
       const opcionesMp = materias.map((m) => `<option value="${m.id}">${esc(m.nombre)}</option>`).join('');
       filtros.materia.innerHTML = `<option value="">Todas</option>${opcionesMp}`;
-      if (puede) editorLlegada = prepararFormulario(zona.querySelector('#form-llegada'), materias, provs, pintarHistorial, filtros, grupos);
+      if (puede) {
+        editorLlegada = prepararFormulario(zona.querySelector('#form-llegada'), materias, provs, pintarHistorial, filtros, grupos);
+        formularioNota(zona.querySelector('#zona-nota'), { materias, provs, grupos, alGuardar: pintarHistorial });
+        zona.querySelectorAll('[name=modo-llegada]').forEach((r) => r.addEventListener('change', () => {
+          const nota = zona.querySelector('[name=modo-llegada]:checked').value === 'nota';
+          zona.querySelector('#zona-nota').classList.toggle('oculto', !nota);
+          zona.querySelector('#form-llegada').classList.toggle('oculto', nota);
+        }));
+      }
     } catch (e) { aviso(e.message, 'error'); }
   })();
 
@@ -396,6 +410,10 @@ function prepararFormulario(form, materias, provs, alGuardar, filtros, grupos) {
       const mp = form.materia_prima_id.selectedOptions[0]?.textContent;
       if (editando) {
         await api.actualizarLlegada(editando.id, datos);
+        if (editando.nota_id && (datos.factura || '') !== (editando.factura || '')) {
+          await api.facturaNota(editando.nota_id, datos.factura);
+          aviso(`La factura se aplicó a los ${editando.nota_productos} productos de la nota.`);
+        }
         aviso(`Llegada corregida: ${fmt.kg(datos.kg_neto)} de ${mp}. Existencias y costos recalculados.`);
       } else {
         await api.crearLlegada(datos);

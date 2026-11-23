@@ -109,6 +109,15 @@ export const api = {
   async eliminarLlegada(id) {
     return ok(await sb.from('llegadas_mp').delete().eq('id', id));
   },
+  async crearNotaEntrada(n) {
+    return ok(await sb.rpc('crear_nota_entrada', {
+      p_fecha: n.fecha, p_proveedor_id: n.proveedorId, p_folio: n.folio, p_factura: n.factura, p_lineas: n.lineas,
+      p_kg_bascula: n.kgBascula, p_ajustar: n.ajustar, p_precio_provisional: n.precioProvisional, p_notas: n.notas,
+    }));
+  },
+  async facturaNota(notaId, factura) {
+    return ok(await sb.rpc('factura_nota', { p_nota_id: notaId, p_factura: factura }));
+  },
   async crearLlegada(datos) {
     return ok(await sb.from('llegadas_mp').insert(datos).select('id').single());
   },
@@ -142,12 +151,13 @@ export const api = {
       p_granja_id: o.granjaId ?? null, p_area: o.area || null, p_kg_reales: o.kgReales ?? null,
     }));
   },
-  async ordenes({ desde, hasta, granja, area, pendientesPesada } = {}) {
+  async ordenes({ desde, hasta, granja, area, pendientesPesada, pesadaConjunta } = {}) {
     let q = sb.from('v_ordenes').select('*').order('fecha', { ascending: false }).order('id', { ascending: false }).limit(500);
     if (desde) q = q.gte('fecha', desde);
     if (hasta) q = q.lte('fecha', hasta);
     if (area) q = q.eq('area', area);
     if (pendientesPesada) q = q.eq('pendiente_pesada', true);
+    if (pesadaConjunta) q = q.eq('pesada_conjunta_id', pesadaConjunta);
     if (granja === 'ninguna') q = q.is('granja_id', null);
     else if (granja) q = q.eq('granja_id', granja);
     return ok(await q);
@@ -160,6 +170,10 @@ export const api = {
   },
   async ingredientesOrden(ordenId) {
     return ok(await sb.from('v_orden_ingredientes').select('materia_prima_id,kg_por_tonelada').eq('orden_id', ordenId));
+  },
+  // Varias órdenes cargadas y pesadas juntas: el total se reparte en proporción a lo ordenado.
+  async registrarPesadaConjunta(ordenIds, kgTotal, pesadaId = null) {
+    return ok(await sb.rpc('registrar_pesada_conjunta', { p_orden_ids: ordenIds, p_kg_total: kgTotal, p_pesada_id: pesadaId }));
   },
   async registrarPesada(ordenId, kgReales) {
     return ok(await sb.rpc('registrar_pesada', { p_orden_id: ordenId, p_kg_reales: kgReales }));
