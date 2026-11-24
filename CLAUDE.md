@@ -34,8 +34,9 @@ Todo en español: tablas, columnas, interfaz y mensajes.
   a `kg_solicitados`. Nota de entrada (`notas_entrada`, `crear_nota_entrada()`): una llegada por producto con `nota_id`;
   pesos de la nota, o ajustados a báscula si `p_ajustar`. `factura_nota()` aplica la factura a toda la nota.
 - Ventas (`ventas` + `venta_renglones`, `guardar_venta()`, módulo 'ventas'): renglón = granja, calidad, cantidad, kg, precio.
-  Huevo: merma = cajas × `merma_kg_caja` (2); precio base México (CDMX) $/kg + `flete_caja` ($/caja, según destino;
-  `flete_kg` solo ventas viejas, en 0). Importe = netos × precio + cajas × flete_caja. Total = Σ importes − descuento.
+  Huevo: merma = cajas × `merma_kg_caja` (2); precio base México (CDMX) $/kg ya incluye el flete. Total (factura y
+  cobranza) = Σ kg netos × precio − descuento. `flete_caja` ($/caja según destino) lo paga la empresa: `flete_total`
+  = cajas × flete_caja; `neto` = total − flete; `precio_neto_kg` (0021). `flete_kg` solo ventas viejas, en 0.
   Calidades en `calidades_venta` (borrego pendiente: texto libre).
   Berries: `presentacion` (sugerencias en `presentaciones_venta` con kg por caja), `merma_kg` por renglón, moneda MXN/USD,
   folio y folio_externo. Generales: `producto_id` → `productos_venta` (catálogo que crece desde la captura).

@@ -110,7 +110,7 @@ function formulario(zona, especie, { clientes, fletes = new Map(), empresas, cal
         <label class="ancho2">Cliente<select name="cliente" required></select><small class="ayuda" id="rfc-cliente"></small></label>
         <label>Destino<input name="destino" maxlength="120" placeholder="Ciudad / lugar" ${t.flete ? 'list="destinos-venta"' : ''}>${t.flete ? '<small class="ayuda" id="ayuda-flete"></small>' : ''}</label>
         ${t.flete ? `<datalist id="destinos-venta">${[...fletes.values()].map((d) => `<option value="${esc(d.destino)}">${d.flete ? `flete ${fmt.dinero(d.flete)}/caja` : ''}</option>`).join('')}</datalist>
-          <label>Flete $/caja<input type="number" name="flete_caja" min="0" step="0.01" inputmode="decimal" value="0"><small class="ayuda">Según la ciudad destino; se suma al precio base</small></label>` : ''}
+          <label>Flete $/caja<input type="number" name="flete_caja" min="0" step="0.01" inputmode="decimal" value="0"><small class="ayuda">Según la ciudad destino. Lo paga la empresa: se descuenta del total</small></label>` : ''}
         <div class="ancho-total caja caja-info oculto" id="nuevo-cliente">
           <div class="rejilla">
             <label class="ancho2">Nombre del cliente<input name="nc_nombre" maxlength="120"></label>
@@ -137,7 +137,7 @@ function formulario(zona, especie, { clientes, fletes = new Map(), empresas, cal
       <div class="tabla-scroll"><table class="tabla-captura">
         <thead><tr>${t.producto ? '<th>Producto</th>' : ''}<th>Granja</th>${t.presentacion ? '<th>Presentación</th>' : ''}${t.calidad ? '<th>Calidad</th>' : ''}
           <th class="num">${t.unidad}</th><th class="num">Kg ${t.flete ? 'brutos (báscula)' : conMerma ? 'brutos' : t.producto ? '(opcional)' : 'totales'}</th>${t.producto ? '' : '<th class="num">Peso prom.</th>'}
-          ${conMerma ? '<th class="num">Merma kg</th><th class="num">Kg netos</th>' : ''}${t.precioPor ? '<th>Cobrar</th>' : ''}<th class="num">${precioLabel}</th>${t.flete ? '<th class="num">Precio total $/kg</th>' : ''}<th class="num">Importe</th><th></th></tr></thead>
+          ${conMerma ? '<th class="num">Merma kg</th><th class="num">Kg netos</th>' : ''}${t.precioPor ? '<th>Cobrar</th>' : ''}<th class="num">${precioLabel}</th>${t.flete ? '<th class="num">Precio neto $/kg</th>' : ''}<th class="num">Importe</th><th></th></tr></thead>
         <tbody id="renglones-venta"></tbody>
       </table></div>
       <button type="button" class="boton boton-chico" id="btn-renglon-venta">+ Agregar renglón</button>
@@ -264,7 +264,7 @@ function formulario(zona, especie, { clientes, fletes = new Map(), empresas, cal
       const precio_por = t.precioPor ? v('precio_por') : 'kg';
       const mermaKg = t.mermaRenglon ? numero(v('merma')) || 0 : cantidad * merma;
       const netos = kg != null ? kg - mermaKg : null;
-      const importe = precio == null ? 0 : (precio_por === 'unidad' ? cantidad * precio : (netos || 0) * precio) + cantidad * flete;
+      const importe = precio == null ? 0 : precio_por === 'unidad' ? cantidad * precio : (netos || 0) * precio;
       return { tr, granja_id: numero(v('granja')), producto_id: numero(v('producto') === NUEVO ? '' : v('producto')), presentacion: v('presentacion').trim(),
         calidad: v('calidad').trim(), cantidad, kg, precio_kg: precio, precio_por, mermaKg, netos, importe };
     });
@@ -280,7 +280,7 @@ function formulario(zona, especie, { clientes, fletes = new Map(), empresas, cal
       if (prom) prom.textContent = f.cantidad && f.kg ? `${n2.format(f.kg / f.cantidad)} kg` : '—';
       if (t.merma) f.tr.querySelector('.merma').textContent = f.cantidad ? fmt.kg(f.mermaKg) : '—';
       if (conMerma) f.tr.querySelector('.netos').textContent = f.netos != null ? fmt.kg(f.netos) : '—';
-      if (t.flete) f.tr.querySelector('.ptotal').textContent = f.precio_kg != null && f.netos > 0 ? fmt.precio(f.precio_kg + (f.cantidad * flete) / f.netos) : '—';
+      if (t.flete) f.tr.querySelector('.ptotal').textContent = f.precio_kg != null && f.netos > 0 ? fmt.precio(f.precio_kg - (f.cantidad * flete) / f.netos) : '—';
       f.tr.querySelector('.importe').textContent = f.importe ? dinero(f.importe, m) : '—';
       cant += f.cantidad; kg += f.kg || 0; netos += f.netos || 0; importe += f.importe;
     }
@@ -291,7 +291,8 @@ function formulario(zona, especie, { clientes, fletes = new Map(), empresas, cal
     form.querySelector('#totales-venta').innerHTML = `
       <div class="kpi"><span>${t.unidad}</span><b>${n2.format(cant)}</b><small>${cant && kg && !t.producto ? `peso promedio ${n2.format(kg / cant)} kg` : ''}</small></div>
       ${kg || !t.producto ? `<div class="kpi"><span>Kg ${conMerma ? 'netos' : 'totales'}</span><b>${fmt.kg(netos)}</b><small>${conMerma ? `${fmt.kg(kg)} brutos − ${fmt.kg(kg - netos)} merma` : ''}</small></div>` : ''}
-      <div class="kpi"><span>Total ${t.muertos ? 'de factura' : ''}</span><b>${dinero(total, m)}</b><small>${fleteTotal ? `incluye flete ${dinero(fleteTotal, m)} · ` : ''}${descuento ? `${dinero(importe, m)} − descuento ${dinero(descuento, m)}` : ''}${netos ? ` · ${dinero(total / netos, m)}/kg` : ''}</small></div>
+      <div class="kpi"><span>Total ${t.muertos || t.flete ? 'de factura' : ''}</span><b>${dinero(total, m)}</b><small>${descuento ? `${dinero(importe, m)} − descuento ${dinero(descuento, m)}` : ''}${netos ? ` · ${dinero(total / netos, m)}/kg` : ''}</small></div>
+      ${t.flete ? `<div class="kpi"><span>Neto (menos flete)</span><b>${dinero(total - fleteTotal, m)}</b><small>flete ${dinero(fleteTotal, m)}${netos ? ` · ${dinero((total - fleteTotal) / netos, m)}/kg neto` : ''}</small></div>` : ''}
       ${form.forma_pago.value === 'credito' ? `<div class="kpi"><span>Saldo</span><b>${dinero(saldo, m)}</b><small>anticipo ${dinero(anticipo, m)}</small></div>` : ''}`;
   };
   // Berries: kg = cajas × kg por caja de la presentación, mientras no se escriban los kg a mano.
@@ -483,7 +484,7 @@ async function historial(zona, especie, filtros, sigueVivo, alEditar) {
     const porId = new Map(filas.map((v) => [String(v.id), v]));
     const describe = (v) => (t.producto ? esc(v.productos || '—') : t.presentacion ? esc([v.presentaciones, v.calidades].filter(Boolean).join(' · ') || '—') : esc(v.calidades || '—'));
     zona.innerHTML = `
-      <p class="nota">${filas.length} venta${filas.length === 1 ? '' : 's'} · ${n2.format(suma('cantidad'))} ${t.unidad.toLowerCase()}${kg ? ` · ${fmt.kg(kg)}` : ''} · <b>${totalesPorMoneda(filas, 'total')}</b>${unaMoneda && kg ? ` · precio promedio ${dinero(suma('total') / kg, filas[0].moneda)}/kg` : ''}${suma('saldo') ? ` · saldo pendiente <b>${totalesPorMoneda(filas, 'saldo')}</b>` : ''}</p>
+      <p class="nota">${filas.length} venta${filas.length === 1 ? '' : 's'} · ${n2.format(suma('cantidad'))} ${t.unidad.toLowerCase()}${kg ? ` · ${fmt.kg(kg)}` : ''} · <b>${totalesPorMoneda(filas, 'total')}</b>${unaMoneda && kg ? ` · precio promedio ${dinero(suma('total') / kg, filas[0].moneda)}/kg` : ''}${suma('flete_total') ? ` · flete ${fmt.dinero(suma('flete_total'))} · neto ${totalesPorMoneda(filas, 'neto')}` : ''}${suma('saldo') ? ` · saldo pendiente <b>${totalesPorMoneda(filas, 'saldo')}</b>` : ''}</p>
       <div class="tabla-scroll"><table>
         <thead><tr><th>Fecha</th><th>Cliente</th><th>${t.producto ? 'Producto' : t.presentacion ? 'Presentación / calidad' : 'Calidad / granja'}</th><th class="num">${t.unidad}</th><th class="num">Kg ${conMerma ? 'netos' : ''}</th><th class="num">Precio prom.</th><th class="num">Total</th><th>Pago</th><th>Capturó</th><th></th></tr></thead>
         <tbody>${filas.map((v) => `
@@ -493,8 +494,8 @@ async function historial(zona, especie, filtros, sigueVivo, alEditar) {
             <td>${describe(v)}<small>${esc(v.granjas || '')}</small></td>
             <td class="num">${n2.format(v.cantidad)}${v.peso_promedio && !t.producto ? `<small>${n2.format(v.peso_promedio)} kg prom.</small>` : ''}${Number(v.muertos) ? `<small class="dif-menos">${v.muertos} muertos</small>` : ''}</td>
             <td class="num">${Number(v.kg_netos) ? fmt.kg(v.kg_netos) : '—'}${Number(v.merma_kg) ? `<small>merma ${fmt.kg(v.merma_kg)}</small>` : ''}</td>
-            <td class="num">${v.precio_promedio_kg ? `${dinero(v.precio_promedio_kg, v.moneda)}/kg` : '—'}${Number(v.flete_caja) ? `<small>base ${fmt.precio(v.precio_base_promedio_kg)} + flete ${fmt.dinero(v.flete_caja)}/caja</small>` : ''}</td>
-            <td class="num">${dinero(v.total, v.moneda)}${Number(v.descuento) ? `<small title="${esc(v.motivo_descuento || '')}">desc. ${dinero(v.descuento, v.moneda)}</small>` : ''}${v.moneda === 'USD' && v.tipo_cambio ? `<small>TC ${n2.format(v.tipo_cambio)}</small>` : ''}</td>
+            <td class="num">${v.precio_promedio_kg ? `${dinero(v.precio_promedio_kg, v.moneda)}/kg` : '—'}${Number(v.flete_total) ? `<small>neto ${fmt.precio(v.precio_neto_kg)}</small><small>flete ${fmt.dinero(v.flete_caja)}/caja</small>` : ''}</td>
+            <td class="num">${dinero(v.total, v.moneda)}${Number(v.descuento) ? `<small title="${esc(v.motivo_descuento || '')}">desc. ${dinero(v.descuento, v.moneda)}</small>` : ''}${Number(v.flete_total) ? `<small>neto ${dinero(v.neto, v.moneda)}</small>` : ''}${v.moneda === 'USD' && v.tipo_cambio ? `<small>TC ${n2.format(v.tipo_cambio)}</small>` : ''}</td>
             <td>${v.tipo_pago === 'factura' ? `Factura ${esc(v.factura || '(sin número)')}<small>${esc(v.empresa_factura || '')}</small>` : 'Efectivo'}
               <small>${v.forma_pago === 'contado' ? 'De contado' : Number(v.saldo) > 0 ? `Saldo ${dinero(v.saldo, v.moneda)}${Number(v.anticipo) + Number(v.pagado) ? ` (pagado ${dinero(Number(v.anticipo) + Number(v.pagado), v.moneda)})` : ''}` : 'Crédito pagado'}</small></td>
             <td>${esc(v.capturado_por || '—')}<small>${esc(fmt.hora(v.capturado_en))}</small>${v.modificado_por ? `<small>Modificó ${esc(v.modificado_por)}</small>` : ''}</td>
@@ -521,7 +522,7 @@ async function historial(zona, especie, filtros, sigueVivo, alEditar) {
           <tbody>${rs.map((r) => `<tr>${t.producto ? `<td>${esc(r.producto || '—')}</td>` : ''}<td>${esc(r.granja || '—')}</td>${t.presentacion ? `<td>${esc(r.presentacion || '—')}</td>` : ''}${t.calidad ? `<td>${esc(r.calidad || '—')}</td>` : ''}
             <td class="num">${n2.format(r.cantidad)}${r.unidad ? ` ${esc(r.unidad)}` : ''}</td><td class="num">${Number(r.kg_brutos) ? fmt.kg(r.kg_brutos) : '—'}${r.peso_promedio && !t.producto ? `<small>${n2.format(r.peso_promedio)} kg prom.</small>` : ''}</td>
             ${conMerma ? `<td class="num">${fmt.kg(r.merma_kg)}</td><td class="num">${fmt.kg(r.kg_netos)}</td>` : ''}
-            <td class="num">${dinero(r.precio_total_kg, v.moneda)}/${r.precio_por === 'unidad' ? esc(r.unidad || (t.presentacion ? 'caja' : 'unidad')) : 'kg'}${Number(r.flete_caja) && r.precio_por !== 'unidad' ? `<small>${fmt.precio(r.precio_kg)} base + flete ${fmt.dinero(r.flete_caja)}/caja (${fmt.dinero(r.flete_importe)})</small>` : ''}</td><td class="num">${dinero(r.importe, v.moneda)}</td></tr>`).join('')}</tbody>
+            <td class="num">${dinero(r.precio_total_kg, v.moneda)}/${r.precio_por === 'unidad' ? esc(r.unidad || (t.presentacion ? 'caja' : 'unidad')) : 'kg'}${Number(r.flete_importe) && r.precio_por !== 'unidad' ? `<small>− flete ${fmt.dinero(r.flete_caja)}/caja (${fmt.dinero(r.flete_importe)}) = neto ${fmt.precio(r.precio_neto_kg)}</small>` : ''}</td><td class="num">${dinero(r.importe, v.moneda)}</td></tr>`).join('')}</tbody>
         </table>${Number(v.pagado) ? `<p class="nota">Pagos aplicados: ${dinero(v.pagado, v.moneda)}${Number(v.anticipo) ? ` · anticipo ${dinero(v.anticipo, v.moneda)}` : ''}. El detalle está en Cobranza y saldos.</p>` : ''}${v.motivo_descuento ? `<p class="nota">Descuento: ${esc(v.motivo_descuento)}</p>` : ''}${v.notas ? `<p class="nota">${esc(v.notas)}</p>` : ''}`;
       } catch (e) { celda.innerHTML = `<span class="caja-error">${esc(e.message)}</span>`; }
     });
