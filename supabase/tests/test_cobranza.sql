@@ -49,3 +49,11 @@ select registrar_pago('{"cliente_id": 1, "fecha": "2026-11-22", "monto": 100, "m
 select registrar_pago('{"cliente_id": 1, "fecha": "2026-11-22", "monto": 100, "moneda": "USD"}', '[{"venta_id": 3, "monto": 200}]'); -- aplica más que el pago
 select guardar_venta('{"especie": "berries", "fecha": "2026-11-22", "cliente_id": 1, "tipo_pago": "efectivo"}', '[{"cantidad": 5, "precio_kg": 7}]'); -- por kg sin kg
 reset role;
+
+-- 0020: huevo con flete por caja: 100 cajas, 2,250 kg − 200 merma = 2,050 netos × $28 base + 100 × $15 flete = 57,400 + 1,500 = 58,900
+\set ON_ERROR_STOP 1
+set role authenticated; set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000005';
+select guardar_venta('{"especie": "huevo", "fecha": "2026-11-24", "cliente_id": 3, "destino": "Guadalajara", "tipo_pago": "efectivo", "forma_pago": "contado", "merma_kg_caja": 2, "flete_caja": 15}',
+  '[{"calidad": "Línea", "cantidad": 100, "kg": 2250, "precio_kg": 28}]') as huevo;
+select destino, flete_caja, flete_total, total, precio_base_promedio_kg, precio_promedio_kg from v_ventas where especie = 'huevo';
+reset role;

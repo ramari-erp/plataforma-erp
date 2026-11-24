@@ -39,9 +39,11 @@
     razones sociales; calidades).
 24. Repite con `supabase/migrations/0019_berries_generales_cobranza.sql` (ventas de berries, ventas generales con
     catálogo de productos, y cobranza: pagos de clientes y saldos).
-25. Revisa en **Table Editor** que existan las tablas `granjas`, `materias_primas`, `formulas`.
+25. Repite con `supabase/migrations/0020_flete_por_caja.sql` (flete del huevo por caja según destino; las ventas
+    ya capturadas con flete por kg pasan a flete por caja con el mismo total).
+26. Revisa en **Table Editor** que existan las tablas `granjas`, `materias_primas`, `formulas`.
 
-Siempre en ese orden: 0001 → 0002 → seed → 0003 → 0004 → 0005 → 0006 → 0007 → 0008 → 0009 → 0010 → 0011 → 0012 → datos/0001 → 0013 → 0014 → datos/0002 → 0015 → 0016 → 0017 → 0018 → 0019.
+Siempre en ese orden: 0001 → 0002 → seed → 0003 → 0004 → 0005 → 0006 → 0007 → 0008 → 0009 → 0010 → 0011 → 0012 → datos/0001 → 0013 → 0014 → datos/0002 → 0015 → 0016 → 0017 → 0018 → 0019 → 0020.
 Si un archivo marca "already exists", ese archivo ya se había ejecutado: pasa al siguiente. Si una ejecución marca error, no sigas con la siguiente: copia el mensaje y compártelo.
 
 ## Qué queda cargado
