@@ -35,7 +35,13 @@ Todo en español: tablas, columnas, interfaz y mensajes.
   pesos de la nota, o ajustados a báscula si `p_ajustar`. `factura_nota()` aplica la factura a toda la nota.
 - Ventas (`ventas` + `venta_renglones`, `guardar_venta()`, módulo 'ventas'): renglón = granja, calidad, cantidad, kg, precio.
   Huevo: merma = cajas × `merma_kg_caja` (2), precio total = base + `flete_kg`. Total = Σ netos × precio − descuento;
-  saldo = total − anticipo si es crédito. Calidades en `calidades_venta` (borrego pendiente: texto libre).
+  Calidades en `calidades_venta` (borrego pendiente: texto libre).
+  Berries: `presentacion` (sugerencias en `presentaciones_venta` con kg por caja), `merma_kg` por renglón, moneda MXN/USD,
+  folio y folio_externo. Generales: `producto_id` → `productos_venta` (catálogo que crece desde la captura).
+  `precio_por` = 'kg' (kg netos × (precio + flete)) o 'unidad' (cantidad × precio; kg opcional).
+- Cobranza (`pagos_cliente` + `pago_aplicaciones`, `registrar_pago()`): un pago se aplica a una o varias ventas a crédito
+  del mismo cliente y moneda; lo no aplicado queda a favor. Saldo de venta = total − anticipo − pagado (`v_ventas`);
+  por cliente y moneda en `v_saldos_clientes`. Pantalla Ventas → Cobranza y saldos (cobranza.js).
 - Materias primas nuevas: `crear_materia_prima()` (capturista de planta) las deja `revisada = false`; el
   administrador las revisa en Planta → Materias primas. Duplicados por `nombre_normalizado()` (sin acentos).
 - Fórmulas nuevas: `crear_formula()` (copia de otra o vacía, `revisada = false`). Una fórmula sin ingredientes toma

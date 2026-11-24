@@ -14,14 +14,14 @@ export function pantallaInicio(cont) {
     <div class="accesos">
       <a class="tarjeta acceso" href="#/planta/resumen"><b>Planta de alimentos</b><span>Capacidad, existencias y llegadas de materia prima</span></a>
       ${sesion.puedeCapturar('planta') ? '<a class="tarjeta acceso" href="#/planta/llegadas"><b>Registrar llegada</b><span>Captura una descarga de materia prima</span></a>' : ''}
-      <a class="tarjeta acceso" href="#/ventas/huevo"><b>Ventas</b><span>Huevo, cerdo, ganado y borregos</span></a>
+      <a class="tarjeta acceso" href="#/ventas/huevo"><b>Ventas</b><span>Huevo, cerdo, ganado, borregos, berries y generales; cobranza</span></a>
       ${sesion.esAdmin() ? '<a class="tarjeta acceso" href="#/usuarios"><b>Usuarios</b><span>Altas, roles y permisos</span></a>' : ''}
     </div>`;
   const zona = cont.querySelector('#avisos-inicio');
   cargando(zona);
   (async () => {
     try {
-      const [cap, exis, cob, contr, sinPesada, catalogo, catFormulas, llegPend] = await Promise.all([api.capacidad(), api.existencias(), api.cobertura(), api.contratos({ soloVigentes: true }), api.ordenes({ pendientesPesada: true, hasta: hoy(-1) }), sesion.esAdmin() ? api.materiasCatalogo() : [], sesion.esAdmin() ? api.formulasCatalogo() : [], api.llegadas({ pendientes: true, desde: hoy(-90) })]);
+      const [cap, exis, cob, contr, sinPesada, catalogo, catFormulas, llegPend, saldos] = await Promise.all([api.capacidad(), api.existencias(), api.cobertura(), api.contratos({ soloVigentes: true }), api.ordenes({ pendientesPesada: true, hasta: hoy(-1) }), sesion.esAdmin() ? api.materiasCatalogo() : [], sesion.esAdmin() ? api.formulasCatalogo() : [], api.llegadas({ pendientes: true, desde: hoy(-90) }), api.saldosClientes().catch(() => [])]);
       if (!vivo) return;
       const avisos = [
         ...cap.filter((g) => Number(g.ocupacion_pct) >= 90)
@@ -36,6 +36,8 @@ export function pantallaInicio(cont) {
       if (formulasRevisar) avisos.push(`Planta: <b>${formulasRevisar}</b> fórmula${formulasRevisar > 1 ? 's' : ''} nueva${formulasRevisar > 1 ? 's' : ''} por revisar. <a href="#/planta/formulas">Revisar</a>`);
       if (llegPend.length) avisos.push(`Planta: <b>${llegPend.length}</b> llegada${llegPend.length > 1 ? 's' : ''} con información pendiente (factura o precio provisional). <a href="#/planta/llegadas/pendientes">Completar</a>`);
       if (sinPesada.length) avisos.push(`Planta: <b>${sinPesada.length}</b> órdenes de días anteriores sin pesada real. <a href="#/planta/produccion">Capturar</a>`);
+      const vencidos = saldos.filter((s) => Number(s.saldo) > 0 && s.venta_mas_antigua && s.venta_mas_antigua < hoy(-30));
+      if (vencidos.length) avisos.push(`Ventas: <b>${vencidos.length}</b> cliente${vencidos.length > 1 ? 's' : ''} con saldo de ventas de hace más de 30 días (${vencidos.slice(0, 3).map((s) => esc(s.cliente)).join(', ')}${vencidos.length > 3 ? '…' : ''}). <a href="#/ventas/cobranza">Ver cobranza</a>`);
       const negativas = exis.filter((x) => Number(x.existencia_kg) < 0).length;
       if (negativas) avisos.push(`Planta: <b>${negativas}</b> materias primas con existencia negativa; falta el inventario de arranque o alguna llegada.`);
       zona.innerHTML = avisos.length

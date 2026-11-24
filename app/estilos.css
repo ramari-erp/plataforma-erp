@@ -217,3 +217,10 @@ td.notas-celda { white-space: normal; min-width: 200px; color: var(--texto-suave
 .margen-arriba { margin-top: 16px; }
 #form-venta .tabla-captura select, #form-venta .tabla-captura input[name=calidad] { min-width: 130px; }
 #totales-venta { margin: 12px 0 16px; }
+.kpi-alerta { border-color: var(--peligro, #b42318); }
+.kpi-alerta b { color: var(--peligro, #b42318); }
+.unidad-prod { display: block; color: var(--texto-suave); }
+.unidad-prod:empty { display: none; }
+#form-venta .tabla-captura input[name=presentacion] { min-width: 150px; }
+#form-venta .tabla-captura select[name=producto] { min-width: 200px; }
+#form-venta .tabla-captura select[name=precio_por] { min-width: 100px; }

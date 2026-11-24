@@ -77,9 +77,19 @@ export const api = {
   async calidadesVenta(especie) {
     return ok(await sb.from('calidades_venta').select('nombre').eq('especie', especie).eq('activa', true).order('orden'));
   },
-  async ventas({ especie, desde, hasta, cliente, conSaldo } = {}) {
+  async presentacionesVenta(especie) {
+    return ok(await sb.from('presentaciones_venta').select('nombre,kg_por_caja').eq('especie', especie).order('orden'));
+  },
+  async productosVenta() {
+    return ok(await sb.from('productos_venta').select('id,nombre,unidad,area,precio_sugerido').eq('activo', true).order('nombre'));
+  },
+  async crearProductoVenta({ nombre, unidad, area }) {
+    return ok(await sb.from('productos_venta').insert({ nombre, unidad, area: area || null }).select('id,nombre,unidad,area,precio_sugerido').single());
+  },
+  async ventas({ especie, desde, hasta, cliente, conSaldo, moneda } = {}) {
     let q = sb.from('v_ventas').select('*').order('fecha', { ascending: false }).order('id', { ascending: false }).limit(500);
     if (especie) q = q.eq('especie', especie);
+    if (moneda) q = q.eq('moneda', moneda);
     if (desde) q = q.gte('fecha', desde);
     if (hasta) q = q.lte('fecha', hasta);
     if (cliente) q = q.eq('cliente_id', cliente);
@@ -94,6 +104,29 @@ export const api = {
   },
   async eliminarVenta(id) {
     return ok(await sb.from('ventas').delete().eq('id', id));
+  },
+  // ---- Cobranza ----
+  async pagos({ cliente, desde, hasta } = {}) {
+    let q = sb.from('v_pagos').select('*').order('fecha', { ascending: false }).order('id', { ascending: false }).limit(500);
+    if (cliente) q = q.eq('cliente_id', cliente);
+    if (desde) q = q.gte('fecha', desde);
+    if (hasta) q = q.lte('fecha', hasta);
+    return ok(await q);
+  },
+  async aplicacionesPago(pagoId) {
+    return ok(await sb.from('pago_aplicaciones').select('venta_id,monto').eq('pago_id', pagoId));
+  },
+  async aplicacionesVenta(ventaId) {
+    return ok(await sb.from('pago_aplicaciones').select('pago_id,monto').eq('venta_id', ventaId));
+  },
+  async registrarPago(pago, aplicaciones, id = null) {
+    return ok(await sb.rpc('registrar_pago', { p_pago: pago, p_aplicaciones: aplicaciones, p_id: id }));
+  },
+  async eliminarPago(id) {
+    return ok(await sb.from('pagos_cliente').delete().eq('id', id));
+  },
+  async saldosClientes() {
+    return ok(await sb.from('v_saldos_clientes').select('*').order('cliente'));
   },
   async proveedores() {
     return ok(await sb.from('proveedores').select('id,nombre').eq('activo', true).order('nombre'));
