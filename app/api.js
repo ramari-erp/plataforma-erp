@@ -61,6 +61,40 @@ export const api = {
   async actualizarMateria(id, campos) {
     return ok(await sb.from('materias_primas').update(campos).eq('id', id));
   },
+  // ---- Ventas ----
+  async clientes() {
+    return ok(await sb.from('clientes').select('id,nombre,rfc,razon_social').eq('activo', true).order('nombre'));
+  },
+  async crearCliente({ nombre, rfc }) {
+    return ok(await sb.from('clientes').insert({ nombre, rfc: rfc || null }).select('id,nombre,rfc,razon_social').single());
+  },
+  async actualizarCliente(id, campos) {
+    return ok(await sb.from('clientes').update(campos).eq('id', id));
+  },
+  async empresasFactura() {
+    return ok(await sb.from('empresas_factura').select('id,nombre').eq('activa', true).order('id'));
+  },
+  async calidadesVenta(especie) {
+    return ok(await sb.from('calidades_venta').select('nombre').eq('especie', especie).eq('activa', true).order('orden'));
+  },
+  async ventas({ especie, desde, hasta, cliente, conSaldo } = {}) {
+    let q = sb.from('v_ventas').select('*').order('fecha', { ascending: false }).order('id', { ascending: false }).limit(500);
+    if (especie) q = q.eq('especie', especie);
+    if (desde) q = q.gte('fecha', desde);
+    if (hasta) q = q.lte('fecha', hasta);
+    if (cliente) q = q.eq('cliente_id', cliente);
+    if (conSaldo) q = q.gt('saldo', 0);
+    return ok(await q);
+  },
+  async renglonesVenta(ventaId) {
+    return ok(await sb.from('v_venta_renglones').select('*').eq('venta_id', ventaId).order('id'));
+  },
+  async guardarVenta(venta, renglones, id = null) {
+    return ok(await sb.rpc('guardar_venta', { p_venta: venta, p_renglones: renglones, p_id: id }));
+  },
+  async eliminarVenta(id) {
+    return ok(await sb.from('ventas').delete().eq('id', id));
+  },
   async proveedores() {
     return ok(await sb.from('proveedores').select('id,nombre').eq('activo', true).order('nombre'));
   },

@@ -35,9 +35,11 @@
 21. Repite con `supabase/migrations/0016_folios_unicos.sql` (folio de contrato y boleta de báscula no se repiten).
 22. Repite con `supabase/migrations/0017_pesadas_y_notas.sql` (pesada conjunta de varias órdenes; nota de
     entrada con varios productos).
-23. Revisa en **Table Editor** que existan las tablas `granjas`, `materias_primas`, `formulas`.
+23. Repite con `supabase/migrations/0018_ventas.sql` (ventas de huevo, cerdo, ganado y borregos; clientes con RFC;
+    razones sociales; calidades).
+24. Revisa en **Table Editor** que existan las tablas `granjas`, `materias_primas`, `formulas`.
 
-Siempre en ese orden: 0001 → 0002 → seed → 0003 → 0004 → 0005 → 0006 → 0007 → 0008 → 0009 → 0010 → 0011 → 0012 → datos/0001 → 0013 → 0014 → datos/0002 → 0015 → 0016 → 0017.
+Siempre en ese orden: 0001 → 0002 → seed → 0003 → 0004 → 0005 → 0006 → 0007 → 0008 → 0009 → 0010 → 0011 → 0012 → datos/0001 → 0013 → 0014 → datos/0002 → 0015 → 0016 → 0017 → 0018.
 Si un archivo marca "already exists", ese archivo ya se había ejecutado: pasa al siguiente. Si una ejecución marca error, no sigas con la siguiente: copia el mensaje y compártelo.
 
 ## Qué queda cargado

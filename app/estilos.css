@@ -212,3 +212,8 @@ td.notas-celda { white-space: normal; min-width: 200px; color: var(--texto-suave
 #form-nota .tabla-captura select { min-width: 220px; }
 #form-nota #btn-renglon { margin: 10px 0; }
 #form-nota .casilla { margin: 8px 0; }
+
+/* Ventas */
+.margen-arriba { margin-top: 16px; }
+#form-venta .tabla-captura select, #form-venta .tabla-captura input[name=calidad] { min-width: 130px; }
+#totales-venta { margin: 12px 0 16px; }

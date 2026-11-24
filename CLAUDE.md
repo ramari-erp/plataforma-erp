@@ -33,6 +33,9 @@ Todo en español: tablas, columnas, interfaz y mensajes.
 - Pesada conjunta (`pesadas_conjuntas`, `registrar_pesada_conjunta()`): el total se reparte entre órdenes en proporción
   a `kg_solicitados`. Nota de entrada (`notas_entrada`, `crear_nota_entrada()`): una llegada por producto con `nota_id`;
   pesos de la nota, o ajustados a báscula si `p_ajustar`. `factura_nota()` aplica la factura a toda la nota.
+- Ventas (`ventas` + `venta_renglones`, `guardar_venta()`, módulo 'ventas'): renglón = granja, calidad, cantidad, kg, precio.
+  Huevo: merma = cajas × `merma_kg_caja` (2), precio total = base + `flete_kg`. Total = Σ netos × precio − descuento;
+  saldo = total − anticipo si es crédito. Calidades en `calidades_venta` (borrego pendiente: texto libre).
 - Materias primas nuevas: `crear_materia_prima()` (capturista de planta) las deja `revisada = false`; el
   administrador las revisa en Planta → Materias primas. Duplicados por `nombre_normalizado()` (sin acentos).
 - Fórmulas nuevas: `crear_formula()` (copia de otra o vacía, `revisada = false`). Una fórmula sin ingredientes toma

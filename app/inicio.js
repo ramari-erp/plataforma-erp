@@ -14,6 +14,7 @@ export function pantallaInicio(cont) {
     <div class="accesos">
       <a class="tarjeta acceso" href="#/planta/resumen"><b>Planta de alimentos</b><span>Capacidad, existencias y llegadas de materia prima</span></a>
       ${sesion.puedeCapturar('planta') ? '<a class="tarjeta acceso" href="#/planta/llegadas"><b>Registrar llegada</b><span>Captura una descarga de materia prima</span></a>' : ''}
+      <a class="tarjeta acceso" href="#/ventas/huevo"><b>Ventas</b><span>Huevo, cerdo, ganado y borregos</span></a>
       ${sesion.esAdmin() ? '<a class="tarjeta acceso" href="#/usuarios"><b>Usuarios</b><span>Altas, roles y permisos</span></a>' : ''}
     </div>`;
   const zona = cont.querySelector('#avisos-inicio');
