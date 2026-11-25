@@ -45,6 +45,8 @@ Todo en español: tablas, columnas, interfaz y mensajes.
 - Cobranza (`pagos_cliente` + `pago_aplicaciones`, `registrar_pago()`): un pago se aplica a una o varias ventas a crédito
   del mismo cliente y moneda; lo no aplicado queda a favor. Saldo de venta = total − anticipo − pagado (`v_ventas`);
   por cliente y moneda en `v_saldos_clientes`. Pantalla Ventas → Cobranza y saldos (cobranza.js).
+  Pagos: editar y eliminar desde Pagos recibidos o el estado de cuenta; eliminar lo puede quien captura ventas (0023).
+- Almacenes de planta (`grupos_almacen`): Sorgo (zona roja 4,800 t + 10 t tolvas) y Maíz (zona amarilla 1,350 t + 10 t) separados (0023).
 - Materias primas nuevas: `crear_materia_prima()` (capturista de planta) las deja `revisada = false`; el
   administrador las revisa en Planta → Materias primas. Duplicados por `nombre_normalizado()` (sin acentos).
 - Fórmulas nuevas: `crear_formula()` (copia de otra o vacía, `revisada = false`). Una fórmula sin ingredientes toma

@@ -432,37 +432,44 @@ async function historial(zona, filtros, sigueVivo, alEditar, recargar) {
 
     // ---- Pesada conjunta: varias órdenes pesadas juntas ----
     const barra = zona.querySelector('#barra-pesada');
+    // El campo del total se pinta una sola vez; al escribir solo se actualizan el reparto y la diferencia
+    // (si se volviera a pintar el campo, el cursor regresaría al inicio y el número se escribiría al revés).
+    const pintarReparto = () => {
+      const ords = [...seleccion.values()];
+      const sol = ords.reduce((s, o) => s + Number(o.kg_solicitados), 0);
+      const total = numero(barra.querySelector('[name=kg_total]').value);
+      barra.querySelector('.titulo-pesada').innerHTML = `<b>${pesadaCorrigiendo ? 'Corregir pesada conjunta' : 'Pesada conjunta'}:</b> ${ords.length} órden${ords.length === 1 ? '' : 'es'} · ordenado ${fmt.kg(sol)}${ords.length < 2 ? ' — elige al menos otra orden' : ''}`;
+      barra.querySelector('.lista-reparto').innerHTML = ords.map((o) => `<li>${esc(o.formula)}: ordenado ${fmt.kg(o.kg_solicitados)}${total ? ` → <b>${fmt.kg(Math.round(o.kg_solicitados * total / sol * 100) / 100)}</b>` : ''}</li>`).join('');
+      barra.querySelector('.nota-diferencia').innerHTML = total && sol ? `Diferencia ${total - sol > 0 ? '+' : ''}${fmt.kg(total - sol)} (${fmt.pct(100 * (total - sol) / sol)}), repartida en proporción a lo ordenado.` : '';
+      const btn = barra.querySelector('[data-registrar-conjunta]');
+      btn.disabled = ords.length < 2;
+      btn.textContent = pesadaCorrigiendo ? 'Guardar corrección' : 'Registrar pesada conjunta';
+    };
     const pintarBarra = () => {
       if (!barra) return;
       const ords = [...seleccion.values()];
       barra.classList.toggle('oculto', ords.length === 0);
       if (!ords.length) return;
-      const sol = ords.reduce((s, o) => s + Number(o.kg_solicitados), 0);
-      const total = numero(barra.querySelector('[name=kg_total]')?.value);
-      const reparto = ords.map((o) => `<li>${esc(o.formula)}: ordenado ${fmt.kg(o.kg_solicitados)}${total ? ` → <b>${fmt.kg(Math.round(o.kg_solicitados * total / sol * 100) / 100)}</b>` : ''}</li>`).join('');
-      const totalAntes = barra.querySelector('[name=kg_total]')?.value ?? (pesadaCorrigiendo ? pesadaCorrigiendo.total : '');
-      barra.innerHTML = `
-        <p><b>${pesadaCorrigiendo ? 'Corregir pesada conjunta' : 'Pesada conjunta'}:</b> ${ords.length} órden${ords.length === 1 ? '' : 'es'} · ordenado ${fmt.kg(sol)}${ords.length < 2 ? ' — elige al menos otra orden' : ''}</p>
-        <ul class="lista-reparto">${reparto}</ul>
-        <div class="en-linea">
-          <input type="number" name="kg_total" class="celda-num" min="0.01" step="0.01" inputmode="decimal" placeholder="Total báscula (kg)" aria-label="Total de la báscula en kg" value="${totalAntes}">
-          <button type="button" class="boton boton-chico boton-primario" data-registrar-conjunta ${ords.length < 2 ? 'disabled' : ''}>${pesadaCorrigiendo ? 'Guardar corrección' : 'Registrar pesada conjunta'}</button>
-          <button type="button" class="boton boton-chico" data-cancelar-conjunta>Cancelar</button>
-        </div>
-        ${total && sol ? `<p class="nota">Diferencia ${total - sol > 0 ? '+' : ''}${fmt.kg(total - sol)} (${fmt.pct(100 * (total - sol) / sol)}), repartida en proporción a lo ordenado.</p>` : ''}`;
+      if (!barra.querySelector('[name=kg_total]')) {
+        barra.innerHTML = `
+          <p class="titulo-pesada"></p>
+          <ul class="lista-reparto"></ul>
+          <div class="en-linea">
+            <input type="number" name="kg_total" class="celda-num" min="0.01" step="0.01" inputmode="decimal" placeholder="Total báscula (kg)" aria-label="Total de la báscula en kg" value="${pesadaCorrigiendo ? esc(String(pesadaCorrigiendo.total ?? '')) : ''}">
+            <button type="button" class="boton boton-chico boton-primario" data-registrar-conjunta></button>
+            <button type="button" class="boton boton-chico" data-cancelar-conjunta>Cancelar</button>
+          </div>
+          <p class="nota nota-diferencia"></p>`;
+      }
+      pintarReparto();
     };
     if (barra) {
-      barra.addEventListener('input', (ev) => {
-        if (ev.target.name !== 'kg_total') return;
-        const pos = ev.target.selectionStart;
-        pintarBarra();
-        const inp = barra.querySelector('[name=kg_total]'); inp.focus();
-        try { inp.setSelectionRange(pos, pos); } catch { /* number inputs */ }
-      });
+      barra.addEventListener('input', (ev) => { if (ev.target.name === 'kg_total') pintarReparto(); });
       barra.addEventListener('click', async (ev) => {
         if (ev.target.closest('[data-cancelar-conjunta]')) {
           seleccion.clear(); pesadaCorrigiendo = null;
           zona.querySelectorAll('[data-sel]').forEach((c) => { c.checked = false; });
+          barra.innerHTML = '';
           return pintarBarra();
         }
         const btn = ev.target.closest('[data-registrar-conjunta]');

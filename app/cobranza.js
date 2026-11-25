@@ -87,7 +87,7 @@ export function pantallaCobranza(cont, pestanas) {
         if (Number(v.anticipo)) movs.push({ fecha: v.fecha, orden: v.id * 10 + 1, concepto: 'Anticipo', detalle: v.folio ? `folio ${v.folio}` : '', cargo: 0, abono: Number(v.anticipo) });
       }
       for (const p of pagos.filter((x) => x.moneda === moneda)) {
-        movs.push({ fecha: p.fecha, orden: 1e12 + p.id, concepto: `Pago ${p.forma}${p.banco ? ` ${p.banco}` : ''}${p.referencia ? ` · ${p.referencia}` : ''}`, detalle: p.ventas ? `Aplicado a ${p.ventas}` : 'Sin aplicar', cargo: 0, abono: Number(p.monto) });
+        movs.push({ fecha: p.fecha, orden: 1e12 + p.id, concepto: `Pago ${p.forma}${p.banco ? ` ${p.banco}` : ''}${p.referencia ? ` · ${p.referencia}` : ''}`, detalle: p.ventas ? `Aplicado a ${p.ventas}` : 'Sin aplicar', cargo: 0, abono: Number(p.monto), pago: p });
       }
       movs.sort((a, b) => a.fecha.localeCompare(b.fecha) || a.orden - b.orden);
       let saldo = 0;
@@ -96,19 +96,22 @@ export function pantallaCobranza(cont, pestanas) {
           <h2>Estado de cuenta: ${esc(nombre)} (${moneda})</h2>
           <p class="nota">Ventas a crédito, anticipos y pagos en orden de fecha. Las ventas de contado no aparecen porque se pagan al momento.</p>
           ${movs.length ? `<div class="tabla-scroll"><table>
-            <thead><tr><th>Fecha</th><th>Concepto</th><th class="num">Cargo</th><th class="num">Abono</th><th class="num">Saldo</th></tr></thead>
+            <thead><tr><th>Fecha</th><th>Concepto</th><th class="num">Cargo</th><th class="num">Abono</th><th class="num">Saldo</th>${puede ? '<th></th>' : ''}</tr></thead>
             <tbody>${movs.map((m) => { saldo += m.cargo - m.abono; return `<tr><td>${fmt.fecha(m.fecha)}</td><td>${esc(m.concepto)}<small>${esc(m.detalle || '')}</small></td>
-              <td class="num">${m.cargo ? dinero(m.cargo, moneda) : ''}</td><td class="num">${m.abono ? dinero(m.abono, moneda) : ''}</td><td class="num">${dinero(saldo, moneda)}</td></tr>`; }).join('')}</tbody>
+              <td class="num">${m.cargo ? dinero(m.cargo, moneda) : ''}</td><td class="num">${m.abono ? dinero(m.abono, moneda) : ''}</td><td class="num">${dinero(saldo, moneda)}</td>
+              ${puede ? `<td class="acciones">${m.pago ? botonesPago(m.pago.id) : ''}</td>` : ''}</tr>`; }).join('')}</tbody>
           </table></div><p><b>Saldo al día: ${dinero(saldo, moneda)}</b>${saldo < 0 ? ' (a favor del cliente)' : ''}</p>` : '<p class="vacio">Sin movimientos a crédito.</p>'}
           <button type="button" class="boton boton-chico" id="cerrar-estado">Cerrar</button>
         </div>`;
       zEstado.querySelector('#cerrar-estado').onclick = () => { estadoAbierto = null; zEstado.innerHTML = ''; };
+      const pagosId = new Map(pagos.map((p) => [String(p.id), p]));
+      zEstado.querySelector('tbody')?.addEventListener('click', (ev) => accionPago(ev, pagosId, (p) => editor?.editar(p), recargar));
       zEstado.scrollIntoView({ behavior: 'smooth', block: 'start' });
     } catch (e) { if (vivo) errorEn(zEstado, e); }
   };
 
-  const pintarPagos = () => historialPagos(zPagos, filtros, () => vivo, (p) => editor?.editar(p));
-  const recargar = () => { pintarSaldos(); pintarPagos(); pintarEstado(); };
+  const pintarPagos = () => historialPagos(zPagos, filtros, () => vivo, (p) => editor?.editar(p), recargar);
+  function recargar() { pintarSaldos(); pintarPagos(); pintarEstado(); }
 
   (async () => {
     try {
@@ -277,7 +280,7 @@ function formularioPago(zona, clientes, alGuardar) {
         titulo.textContent = `Editar pago: ${p.cliente}, ${fmt.fecha(p.fecha)}`;
         form.querySelector('button[type=submit]').textContent = 'Guardar cambios';
         btnCancelar.classList.remove('oculto');
-        btnEliminar.classList.toggle('oculto', !sesion.esAdmin());
+        btnEliminar.classList.remove('oculto');
         form.classList.add('editando');
         await cargarVentas();
         form.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -288,7 +291,24 @@ function formularioPago(zona, clientes, alGuardar) {
 
 // ---------- Historial de pagos ----------
 
-async function historialPagos(zona, filtros, sigueVivo, alEditar) {
+// Botones Editar / Eliminar de un pago (eliminar pide confirmación con un segundo clic).
+const botonesPago = (id) => `<button type="button" class="boton boton-chico" data-editar-pago="${id}">Editar</button><button type="button" class="boton boton-chico boton-peligro" data-eliminar-pago="${id}">Eliminar</button>`;
+async function accionPago(ev, porId, alEditar, alEliminar) {
+  const ed = ev.target.closest('[data-editar-pago]');
+  if (ed) return alEditar(porId.get(ed.dataset.editarPago));
+  const el = ev.target.closest('[data-eliminar-pago]');
+  if (!el) return;
+  if (el.dataset.confirmar !== 'si') { el.dataset.confirmar = 'si'; el.textContent = 'Confirmar: eliminar'; return; }
+  el.disabled = true;
+  try {
+    const p = porId.get(el.dataset.eliminarPago);
+    await api.eliminarPago(p.id);
+    aviso(`Pago eliminado (${p.cliente}, ${dinero(p.monto, p.moneda)}); las ventas recuperan su saldo.`);
+    alEliminar();
+  } catch (e) { aviso(e.message, 'error'); el.disabled = false; }
+}
+
+async function historialPagos(zona, filtros, sigueVivo, alEditar, alEliminar) {
   try {
     const filas = await api.pagos({ cliente: filtros.cliente.value || null, desde: filtros.desde.value, hasta: filtros.hasta.value });
     if (!sigueVivo()) return;
@@ -307,12 +327,9 @@ async function historialPagos(zona, filtros, sigueVivo, alEditar) {
           <td>${esc(p.forma)}<small>${esc([p.banco, p.referencia, p.factura ? `Factura ${p.factura}` : ''].filter(Boolean).join(' · '))}</small></td>
           <td>${esc(p.ventas || '—')}${Number(p.sin_aplicar) >= 0.01 ? `<small>${dinero(p.sin_aplicar, p.moneda)} sin aplicar</small>` : ''}${p.notas ? `<small>${esc(p.notas)}</small>` : ''}</td>
           <td>${esc(p.capturado_por || '—')}<small>${esc(fmt.hora(p.capturado_en))}</small></td>
-          <td class="acciones">${puede ? `<button type="button" class="boton boton-chico" data-editar-pago="${p.id}">Editar</button>` : ''}</td>
+          <td class="acciones">${puede ? botonesPago(p.id) : ''}</td>
         </tr>`).join('')}</tbody>
       </table></div>`;
-    zona.querySelector('tbody').addEventListener('click', (ev) => {
-      const b = ev.target.closest('[data-editar-pago]');
-      if (b) alEditar(porId.get(b.dataset.editarPago));
-    });
+    zona.querySelector('tbody').addEventListener('click', (ev) => accionPago(ev, porId, alEditar, alEliminar));
   } catch (e) { if (sigueVivo()) errorEn(zona, e); }
 }
