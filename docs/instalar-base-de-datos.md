@@ -43,9 +43,11 @@
     ya capturadas con flete por kg pasan a flete por caja con el mismo total).
 26. Repite con `supabase/migrations/0021_flete_descuenta.sql` (corrige 0020: el precio base ya incluye el flete; el flete
     se descuenta del total para sacar el neto recibido).
-27. Revisa en **Table Editor** que existan las tablas `granjas`, `materias_primas`, `formulas`.
+27. Repite con `supabase/migrations/0022_destino_huevo.sql` (huevo sin flete; destino con colonia, ciudad y estado, y
+    aumento al destino en centavos por kg como dato de referencia).
+28. Revisa en **Table Editor** que existan las tablas `granjas`, `materias_primas`, `formulas`.
 
-Siempre en ese orden: 0001 → 0002 → seed → 0003 → 0004 → 0005 → 0006 → 0007 → 0008 → 0009 → 0010 → 0011 → 0012 → datos/0001 → 0013 → 0014 → datos/0002 → 0015 → 0016 → 0017 → 0018 → 0019 → 0020 → 0021.
+Siempre en ese orden: 0001 → 0002 → seed → 0003 → 0004 → 0005 → 0006 → 0007 → 0008 → 0009 → 0010 → 0011 → 0012 → datos/0001 → 0013 → 0014 → datos/0002 → 0015 → 0016 → 0017 → 0018 → 0019 → 0020 → 0021 → 0022.
 Si un archivo marca "already exists", ese archivo ya se había ejecutado: pasa al siguiente. Si una ejecución marca error, no sigas con la siguiente: copia el mensaje y compártelo.
 
 ## Qué queda cargado

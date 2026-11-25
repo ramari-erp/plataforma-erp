@@ -50,11 +50,11 @@ select registrar_pago('{"cliente_id": 1, "fecha": "2026-11-22", "monto": 100, "m
 select guardar_venta('{"especie": "berries", "fecha": "2026-11-22", "cliente_id": 1, "tipo_pago": "efectivo"}', '[{"cantidad": 5, "precio_kg": 7}]'); -- por kg sin kg
 reset role;
 
--- 0021: huevo con flete por caja: 100 cajas, 2,250 kg − 200 merma = 2,050 netos × $28 = 57,400 total; flete 100 × $15 = 1,500; neto 55,900
+-- 0022: huevo con destino desglosado y aumento al destino (solo dato): 2,050 netos × $28 = 57,400; total y saldo no cambian
 \set ON_ERROR_STOP 1
 set role authenticated; set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000005';
-select guardar_venta('{"especie": "huevo", "fecha": "2026-11-24", "cliente_id": 3, "destino": "Guadalajara", "tipo_pago": "efectivo", "forma_pago": "contado", "merma_kg_caja": 2, "flete_caja": 15}',
+select guardar_venta('{"especie": "huevo", "fecha": "2026-11-24", "cliente_id": 3, "destino": "Centro, Guadalajara, Jalisco", "destino_colonia": "Centro",
+  "destino_ciudad": "Guadalajara", "destino_estado": "Jalisco", "aumento_centavos_kg": 45, "tipo_pago": "efectivo", "forma_pago": "credito", "merma_kg_caja": 2}',
   '[{"calidad": "Línea", "cantidad": 100, "kg": 2250, "precio_kg": 28}]') as huevo;
-select destino, flete_caja, flete_total, total, neto, precio_promedio_kg, precio_neto_kg from v_ventas where especie = 'huevo';
-select cantidad, kg_netos, precio_total_kg, importe, flete_importe, precio_neto_kg from v_venta_renglones where flete_importe > 0;
+select destino, destino_colonia, destino_ciudad, destino_estado, aumento_centavos_kg, flete_total, total, neto, saldo, precio_promedio_kg from v_ventas where especie = 'huevo';
 reset role;

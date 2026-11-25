@@ -8,7 +8,7 @@ import { pantallaCobranza, irACobrar } from './cobranza.js';
 
 // calidad: 'catalogo' = lista cerrada; 'libre' = texto con sugerencias; null = sin calidad.
 const TIPOS = {
-  huevo:   { nombre: 'Huevo',     unidad: 'Cajas',    area: 'aves',     calidad: 'catalogo', obligaCalidad: true, flete: true, merma: 2 },
+  huevo:   { nombre: 'Huevo',     unidad: 'Cajas',    area: 'aves',     calidad: 'catalogo', obligaCalidad: true, destino: true, merma: 2 },
   cerdo:   { nombre: 'Cerdo',     unidad: 'Cerdos',   area: 'cerdos',   calidad: 'catalogo', obligaCalidad: true, muertos: true },
   ganado:  { nombre: 'Ganado',    unidad: 'Cabezas',  area: 'ganado',   calidad: 'catalogo', obligaCalidad: true },
   borrego: { nombre: 'Borregos',  unidad: 'Cabezas',  area: 'borregos', calidad: 'libre', obligaCalidad: true },
@@ -17,6 +17,9 @@ const TIPOS = {
   general: { nombre: 'Generales', unidad: 'Cantidad', area: null,       calidad: null, producto: true,
              precioPor: [['unidad', 'Por unidad'], ['kg', 'Por kg']], moneda: true },
 };
+const ESTADOS = ['Aguascalientes', 'Baja California', 'Baja California Sur', 'Campeche', 'Chiapas', 'Chihuahua', 'Ciudad de México', 'Coahuila',
+  'Colima', 'Durango', 'Estado de México', 'Guanajuato', 'Guerrero', 'Hidalgo', 'Jalisco', 'Michoacán', 'Morelos', 'Nayarit', 'Nuevo León', 'Oaxaca',
+  'Puebla', 'Querétaro', 'Quintana Roo', 'San Luis Potosí', 'Sinaloa', 'Sonora', 'Tabasco', 'Tamaulipas', 'Tlaxcala', 'Veracruz', 'Yucatán', 'Zacatecas'];
 const UNIDADES_PRODUCTO = ['pieza', 'kg', 'tonelada', 'costal', 'caja', 'viaje', 'servicio', 'lote'];
 const AREAS = ['aves', 'cerdos', 'ganado', 'borregos', 'berries', 'planta', 'otro'];
 const numero = (v) => (v === '' || v == null ? null : Number(v));
@@ -71,11 +74,16 @@ export function pantallaVentas(cont, seccion = 'huevo') {
         const sugCalidad = [...new Set([...calidades.map((c) => c.nombre), ...separar('calidades')])];
         const nombresPres = new Set(presentaciones.map((p) => p.nombre));
         const sugPres = [...presentaciones, ...[...new Set(separar('presentaciones'))].filter((p) => !nombresPres.has(p)).map((nombre) => ({ nombre }))];
-        // Último flete por caja cobrado a cada destino (previas viene de la más reciente a la más vieja).
-        const fletes = new Map();
-        for (const v of previas) if (v.destino && !fletes.has(normalizar(v.destino))) fletes.set(normalizar(v.destino), { destino: v.destino, flete: Number(v.flete_caja) || 0 });
+        // Destinos ya usados (previas viene de la más reciente a la más vieja): ciudad + estado → último aumento.
+        const destinos = new Map();
+        for (const v of previas) {
+          if (!v.destino_ciudad) continue;
+          const k = normalizar(`${v.destino_ciudad}|${v.destino_estado || ''}`);
+          if (!destinos.has(k)) destinos.set(k, { ciudad: v.destino_ciudad, estado: v.destino_estado, aumento: v.aumento_centavos_kg, colonias: new Set() });
+          if (v.destino_colonia) destinos.get(k).colonias.add(v.destino_colonia);
+        }
         editor = formulario(cont.querySelector('#zona-venta'), especie, {
-          clientes, fletes, empresas, calidades: calidades.map((c) => c.nombre), sugCalidad, presentaciones: sugPres, productos,
+          clientes, destinos, empresas, calidades: calidades.map((c) => c.nombre), sugCalidad, presentaciones: sugPres, productos,
           granjas: granjasArea.length ? granjasArea : granjas.filter((g) => g.activa),
         }, pintar);
       }
@@ -90,7 +98,7 @@ export function pantallaVentas(cont, seccion = 'huevo') {
 
 // ---------- Formulario ----------
 
-function formulario(zona, especie, { clientes, fletes = new Map(), empresas, calidades, sugCalidad, presentaciones, productos, granjas }, alGuardar) {
+function formulario(zona, especie, { clientes, destinos = new Map(), empresas, calidades, sugCalidad, presentaciones, productos, granjas }, alGuardar) {
   const t = TIPOS[especie];
   const NUEVO = '__nuevo__';
   const conMerma = Boolean(t.merma || t.mermaRenglon);
@@ -98,7 +106,7 @@ function formulario(zona, especie, { clientes, fletes = new Map(), empresas, cal
     ? (sel) => `<select name="calidad" aria-label="Calidad"><option value="">Elige…</option>${calidades.map((c) => `<option ${c === sel ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select>`
     : (sel) => `<input name="calidad" list="calidades-${especie}" maxlength="40" value="${esc(sel || '')}" aria-label="Calidad" placeholder="Calidad">`;
   const opcionesProducto = (sel) => `<option value="">Elige…</option>${productos.map((p) => `<option value="${p.id}" ${String(p.id) === String(sel) ? 'selected' : ''}>${esc(p.nombre)}</option>`).join('')}<option value="${NUEVO}">+ Producto nuevo…</option>`;
-  const precioLabel = t.flete ? 'Precio base CDMX $/kg' : t.precioPor ? 'Precio' : 'Precio $/kg';
+  const precioLabel = t.precioPor ? 'Precio' : 'Precio $/kg';
 
   zona.innerHTML = `
     <form class="tarjeta formulario" id="form-venta" autocomplete="off">
@@ -108,9 +116,14 @@ function formulario(zona, especie, { clientes, fletes = new Map(), empresas, cal
       <div class="rejilla">
         <label>Fecha<input type="date" name="fecha" value="${hoy()}" required></label>
         <label class="ancho2">Cliente<select name="cliente" required></select><small class="ayuda" id="rfc-cliente"></small></label>
-        <label>Destino<input name="destino" maxlength="120" placeholder="Ciudad / lugar" ${t.flete ? 'list="destinos-venta"' : ''}>${t.flete ? '<small class="ayuda" id="ayuda-flete"></small>' : ''}</label>
-        ${t.flete ? `<datalist id="destinos-venta">${[...fletes.values()].map((d) => `<option value="${esc(d.destino)}">${d.flete ? `flete ${fmt.dinero(d.flete)}/caja` : ''}</option>`).join('')}</datalist>
-          <label>Flete $/caja<input type="number" name="flete_caja" min="0" step="0.01" inputmode="decimal" value="0"><small class="ayuda">Según la ciudad destino. Lo paga la empresa: se descuenta del total</small></label>` : ''}
+        ${t.destino ? `<datalist id="ciudades-venta">${[...new Set([...destinos.values()].map((d) => d.ciudad))].map((c) => `<option value="${esc(c)}">`).join('')}</datalist>
+          <datalist id="colonias-venta">${[...new Set([...destinos.values()].flatMap((d) => [...d.colonias]))].map((c) => `<option value="${esc(c)}">`).join('')}</datalist>
+          <label>Colonia destino<input name="destino_colonia" maxlength="80" list="colonias-venta" placeholder="Opcional"></label>
+          <label>Ciudad destino<input name="destino_ciudad" maxlength="80" list="ciudades-venta"></label>
+          <label>Estado destino<select name="destino_estado"><option value="">Elige…</option>${ESTADOS.map((e) => `<option>${e}</option>`).join('')}</select></label>
+          <label>Aumento al destino (centavos/kg)<input type="number" name="aumento_centavos_kg" min="0" step="1" inputmode="decimal" placeholder="Ej. 40">
+            <small class="ayuda" id="ayuda-aumento">Solo dato de referencia: no cambia el precio ni el total</small></label>`
+          : '<label>Destino<input name="destino" maxlength="120" placeholder="Ciudad / lugar"></label>'}
         <div class="ancho-total caja caja-info oculto" id="nuevo-cliente">
           <div class="rejilla">
             <label class="ancho2">Nombre del cliente<input name="nc_nombre" maxlength="120"></label>
@@ -129,15 +142,15 @@ function formulario(zona, especie, { clientes, fletes = new Map(), empresas, cal
         <label class="campo-factura">Número de factura<input name="factura" maxlength="60" placeholder="Si ya se emitió"></label>
         <label>Pago<select name="forma_pago"><option value="contado">De contado</option><option value="credito" ${t.credito ? 'selected' : ''}>Crédito / con anticipo</option></select></label>
         <label class="campo-credito oculto">Anticipo<input type="number" name="anticipo" min="0" step="0.01" inputmode="decimal" value="0"></label>
-        ${t.flete ? `<label>Merma kg por caja<input type="number" name="merma_kg_caja" min="0" step="0.01" inputmode="decimal" value="${t.merma}"></label>` : ''}
+        ${t.merma ? `<label>Merma kg por caja<input type="number" name="merma_kg_caja" min="0" step="0.01" inputmode="decimal" value="${t.merma}"></label>` : ''}
         ${t.muertos ? '<label>Muertos<input type="number" name="muertos" min="0" step="1" inputmode="numeric" value="0"></label>' : ''}
       </div>
 
-      <h3>${t.flete ? 'Cajas por granja y calidad' : t.producto ? 'Productos' : 'Detalle'}</h3>
+      <h3>${t.merma ? 'Cajas por granja y calidad' : t.producto ? 'Productos' : 'Detalle'}</h3>
       <div class="tabla-scroll"><table class="tabla-captura">
         <thead><tr>${t.producto ? '<th>Producto</th>' : ''}<th>Granja</th>${t.presentacion ? '<th>Presentación</th>' : ''}${t.calidad ? '<th>Calidad</th>' : ''}
-          <th class="num">${t.unidad}</th><th class="num">Kg ${t.flete ? 'brutos (báscula)' : conMerma ? 'brutos' : t.producto ? '(opcional)' : 'totales'}</th>${t.producto ? '' : '<th class="num">Peso prom.</th>'}
-          ${conMerma ? '<th class="num">Merma kg</th><th class="num">Kg netos</th>' : ''}${t.precioPor ? '<th>Cobrar</th>' : ''}<th class="num">${precioLabel}</th>${t.flete ? '<th class="num">Precio neto $/kg</th>' : ''}<th class="num">Importe</th><th></th></tr></thead>
+          <th class="num">${t.unidad}</th><th class="num">Kg ${t.merma ? 'brutos (báscula)' : conMerma ? 'brutos' : t.producto ? '(opcional)' : 'totales'}</th>${t.producto ? '' : '<th class="num">Peso prom.</th>'}
+          ${conMerma ? '<th class="num">Merma kg</th><th class="num">Kg netos</th>' : ''}${t.precioPor ? '<th>Cobrar</th>' : ''}<th class="num">${precioLabel}</th><th class="num">Importe</th><th></th></tr></thead>
         <tbody id="renglones-venta"></tbody>
       </table></div>
       <button type="button" class="boton boton-chico" id="btn-renglon-venta">+ Agregar renglón</button>
@@ -218,17 +231,26 @@ function formulario(zona, especie, { clientes, fletes = new Map(), empresas, cal
     form.querySelectorAll('.campo-usd').forEach((x) => x.classList.toggle('oculto', moneda() !== 'USD'));
   };
   form.tipo_pago.addEventListener('change', mostrarCampos);
-  // Flete: al elegir un destino ya usado se propone el último flete por caja cobrado ahí.
-  function mostrarFlete() {
-    if (!t.flete) return;
-    const d = fletes.get(normalizar(form.destino.value));
-    form.querySelector('#ayuda-flete').textContent = d?.flete ? `Último flete a ${d.destino}: ${fmt.dinero(d.flete)}/caja` : '';
+  // Destino ya usado: se completa el estado y se propone el último aumento registrado ahí.
+  function mostrarDestino() {
+    if (!t.destino) return null;
+    const ciudad = normalizar(form.destino_ciudad.value);
+    const d = [...destinos.entries()].find(([k]) => k === normalizar(`${form.destino_ciudad.value}|${form.destino_estado.value}`))?.[1]
+      || (!form.destino_estado.value ? [...destinos.values()].find((x) => normalizar(x.ciudad) === ciudad) : null);
+    form.querySelector('#ayuda-aumento').textContent = d && d.aumento != null
+      ? `Último aumento a ${d.ciudad}: ${n2.format(d.aumento)} centavos/kg. Solo dato de referencia.` : 'Solo dato de referencia: no cambia el precio ni el total';
     return d;
   }
-  if (t.flete) form.destino.addEventListener('change', () => {
-    const d = mostrarFlete();
-    if (d?.flete && !Number(form.flete_caja.value)) { form.flete_caja.value = d.flete; actualizar(); }
-  });
+  if (t.destino) {
+    const alCambiar = () => {
+      const d = mostrarDestino();
+      if (!d) return;
+      if (!form.destino_estado.value && d.estado) form.destino_estado.value = d.estado;
+      if (form.aumento_centavos_kg.value === '' && d.aumento != null) form.aumento_centavos_kg.value = d.aumento;
+    };
+    form.destino_ciudad.addEventListener('change', alCambiar);
+    form.destino_estado.addEventListener('change', alCambiar);
+  }
   form.forma_pago.addEventListener('change', mostrarCampos);
   if (t.moneda) form.moneda.addEventListener('change', mostrarCampos);
   mostrarCampos();
@@ -250,13 +272,11 @@ function formulario(zona, especie, { clientes, fletes = new Map(), empresas, cal
         : t.merma ? '<td class="num merma">—</td><td class="num netos">—</td>' : ''}
       ${t.precioPor ? `<td><select name="precio_por" aria-label="Cobrar">${t.precioPor.map(([v, n]) => `<option value="${v}" ${v === precioPor ? 'selected' : ''}>${n}</option>`).join('')}</select></td>` : ''}
       <td class="num"><input type="number" class="celda-num" name="precio" min="0" step="0.0001" inputmode="decimal" value="${r.precio_kg ?? ''}" aria-label="Precio"></td>
-      ${t.flete ? '<td class="num ptotal">—</td>' : ''}
       <td class="num importe">—</td>
       <td><button type="button" class="boton boton-chico" data-quitar-renglon aria-label="Quitar renglón">Quitar</button></td>
     </tr>`;
   };
   const leer = () => {
-    const flete = t.flete ? numero(form.flete_caja.value) || 0 : 0;   // $ por caja
     const merma = t.merma ? numero(form.merma_kg_caja.value) || 0 : 0;
     const filas = [...cuerpo.querySelectorAll('tr')].map((tr) => {
       const v = (n) => tr.querySelector(`[name=${n}]`)?.value ?? '';
@@ -268,19 +288,17 @@ function formulario(zona, especie, { clientes, fletes = new Map(), empresas, cal
       return { tr, granja_id: numero(v('granja')), producto_id: numero(v('producto') === NUEVO ? '' : v('producto')), presentacion: v('presentacion').trim(),
         calidad: v('calidad').trim(), cantidad, kg, precio_kg: precio, precio_por, mermaKg, netos, importe };
     });
-    return { flete, filas };
+    return { filas };
   };
   const actualizar = () => {
-    const { flete, filas } = leer();
+    const { filas } = leer();
     const m = moneda();
-    const fleteTotal = filas.reduce((x, f) => x + (f.precio_kg != null ? f.cantidad * flete : 0), 0);
     let cant = 0, kg = 0, netos = 0, importe = 0;
     for (const f of filas) {
       const prom = f.tr.querySelector('.prom');
       if (prom) prom.textContent = f.cantidad && f.kg ? `${n2.format(f.kg / f.cantidad)} kg` : '—';
       if (t.merma) f.tr.querySelector('.merma').textContent = f.cantidad ? fmt.kg(f.mermaKg) : '—';
       if (conMerma) f.tr.querySelector('.netos').textContent = f.netos != null ? fmt.kg(f.netos) : '—';
-      if (t.flete) f.tr.querySelector('.ptotal').textContent = f.precio_kg != null && f.netos > 0 ? fmt.precio(f.precio_kg - (f.cantidad * flete) / f.netos) : '—';
       f.tr.querySelector('.importe').textContent = f.importe ? dinero(f.importe, m) : '—';
       cant += f.cantidad; kg += f.kg || 0; netos += f.netos || 0; importe += f.importe;
     }
@@ -291,8 +309,7 @@ function formulario(zona, especie, { clientes, fletes = new Map(), empresas, cal
     form.querySelector('#totales-venta').innerHTML = `
       <div class="kpi"><span>${t.unidad}</span><b>${n2.format(cant)}</b><small>${cant && kg && !t.producto ? `peso promedio ${n2.format(kg / cant)} kg` : ''}</small></div>
       ${kg || !t.producto ? `<div class="kpi"><span>Kg ${conMerma ? 'netos' : 'totales'}</span><b>${fmt.kg(netos)}</b><small>${conMerma ? `${fmt.kg(kg)} brutos − ${fmt.kg(kg - netos)} merma` : ''}</small></div>` : ''}
-      <div class="kpi"><span>Total ${t.muertos || t.flete ? 'de factura' : ''}</span><b>${dinero(total, m)}</b><small>${descuento ? `${dinero(importe, m)} − descuento ${dinero(descuento, m)}` : ''}${netos ? ` · ${dinero(total / netos, m)}/kg` : ''}</small></div>
-      ${t.flete ? `<div class="kpi"><span>Neto (menos flete)</span><b>${dinero(total - fleteTotal, m)}</b><small>flete ${dinero(fleteTotal, m)}${netos ? ` · ${dinero((total - fleteTotal) / netos, m)}/kg neto` : ''}</small></div>` : ''}
+      <div class="kpi"><span>Total ${t.muertos || t.merma ? 'de factura' : ''}</span><b>${dinero(total, m)}</b><small>${descuento ? `${dinero(importe, m)} − descuento ${dinero(descuento, m)}` : ''}${netos ? ` · ${dinero(total / netos, m)}/kg` : ''}</small></div>
       ${form.forma_pago.value === 'credito' ? `<div class="kpi"><span>Saldo</span><b>${dinero(saldo, m)}</b><small>anticipo ${dinero(anticipo, m)}</small></div>` : ''}`;
   };
   // Berries: kg = cajas × kg por caja de la presentación, mientras no se escriban los kg a mano.
@@ -385,7 +402,7 @@ function formulario(zona, especie, { clientes, fletes = new Map(), empresas, cal
     btnCancelar.classList.add('oculto'); btnEliminar.classList.add('oculto');
     btnEliminar.dataset.confirmar = ''; btnEliminar.textContent = 'Eliminar venta';
     form.classList.remove('editando');
-    mostrarFlete(); mostrarCampos(); actualizar();
+    mostrarDestino(); mostrarCampos(); actualizar();
   }
   btnCancelar.addEventListener('click', limpiar);
   btnEliminar.addEventListener('click', async () => {
@@ -407,13 +424,16 @@ function formulario(zona, especie, { clientes, fletes = new Map(), empresas, cal
     if (t.obligaCalidad && usados.some((f) => !f.calidad)) return aviso('Captura la calidad de cada renglón.', 'error');
     if (usados.some((f) => f.kg && f.netos <= 0)) return aviso('La merma es mayor que los kg en algún renglón. Revisa cajas y kg.', 'error');
     const venta = {
-      especie, fecha: form.fecha.value, cliente_id: Number(form.cliente.value), destino: form.destino.value.trim(),
+      especie, fecha: form.fecha.value, cliente_id: Number(form.cliente.value),
+      destino: t.destino ? [form.destino_colonia.value.trim(), form.destino_ciudad.value.trim(), form.destino_estado.value].filter(Boolean).join(', ') : form.destino.value.trim(),
+      destino_colonia: t.destino ? form.destino_colonia.value.trim() : '', destino_ciudad: t.destino ? form.destino_ciudad.value.trim() : '',
+      destino_estado: t.destino ? form.destino_estado.value : '', aumento_centavos_kg: t.destino ? form.aumento_centavos_kg.value : '',
       folio: form.folio.value.trim(), folio_externo: t.folioExterno ? form.folio_externo.value.trim() : '',
       moneda: moneda(), tipo_cambio: t.moneda && moneda() === 'USD' ? form.tipo_cambio.value : '',
       tipo_pago: form.tipo_pago.value, empresa_factura_id: form.tipo_pago.value === 'factura' ? form.empresa.value : '',
       factura: form.tipo_pago.value === 'factura' ? form.factura.value.trim() : '',
       forma_pago: form.forma_pago.value, anticipo: form.forma_pago.value === 'credito' ? numero(form.anticipo.value) || 0 : 0,
-      flete_kg: 0, flete_caja: t.flete ? numero(form.flete_caja.value) || 0 : 0, merma_kg_caja: t.merma ? numero(form.merma_kg_caja.value) || 0 : 0,
+      flete_kg: 0, flete_caja: 0, merma_kg_caja: t.merma ? numero(form.merma_kg_caja.value) || 0 : 0,
       muertos: t.muertos ? numero(form.muertos.value) || 0 : 0, descuento: numero(form.descuento.value) || 0,
       motivo_descuento: form.motivo_descuento.value.trim(), notas: form.notas.value.trim(),
     };
@@ -439,13 +459,16 @@ function formulario(zona, especie, { clientes, fletes = new Map(), empresas, cal
       form.fecha.value = v.fecha;
       if (!clientes.some((c) => c.id === v.cliente_id)) clientes.push({ id: v.cliente_id, nombre: v.cliente, rfc: v.rfc });
       pintarClientes(String(v.cliente_id));
-      form.destino.value = v.destino || '';
+      if (t.destino) {
+        form.destino_colonia.value = v.destino_colonia || ''; form.destino_ciudad.value = v.destino_ciudad || (v.destino_estado ? '' : v.destino || '');
+        form.destino_estado.value = v.destino_estado || ''; form.aumento_centavos_kg.value = v.aumento_centavos_kg ?? '';
+      } else form.destino.value = v.destino || '';
       form.folio.value = v.folio || '';
       if (t.folioExterno) form.folio_externo.value = v.folio_externo || '';
       if (t.moneda) { form.moneda.value = v.moneda || 'MXN'; form.tipo_cambio.value = v.tipo_cambio ?? ''; }
       form.tipo_pago.value = v.tipo_pago; form.empresa.value = v.empresa_factura_id ? String(v.empresa_factura_id) : '';
       form.factura.value = v.factura || ''; form.forma_pago.value = v.forma_pago; form.anticipo.value = v.anticipo;
-      if (t.flete) { form.flete_caja.value = v.flete_caja ?? 0; form.merma_kg_caja.value = v.merma_kg_caja; mostrarFlete(); }
+      if (t.merma) { form.merma_kg_caja.value = v.merma_kg_caja; mostrarDestino(); }
       if (t.muertos) form.muertos.value = v.muertos;
       form.descuento.value = v.descuento; form.motivo_descuento.value = v.motivo_descuento || ''; form.notas.value = v.notas || '';
       cuerpo.innerHTML = renglones.map((r) => renglon(r)).join('') || renglon();
@@ -484,18 +507,18 @@ async function historial(zona, especie, filtros, sigueVivo, alEditar) {
     const porId = new Map(filas.map((v) => [String(v.id), v]));
     const describe = (v) => (t.producto ? esc(v.productos || '—') : t.presentacion ? esc([v.presentaciones, v.calidades].filter(Boolean).join(' · ') || '—') : esc(v.calidades || '—'));
     zona.innerHTML = `
-      <p class="nota">${filas.length} venta${filas.length === 1 ? '' : 's'} · ${n2.format(suma('cantidad'))} ${t.unidad.toLowerCase()}${kg ? ` · ${fmt.kg(kg)}` : ''} · <b>${totalesPorMoneda(filas, 'total')}</b>${unaMoneda && kg ? ` · precio promedio ${dinero(suma('total') / kg, filas[0].moneda)}/kg` : ''}${suma('flete_total') ? ` · flete ${fmt.dinero(suma('flete_total'))} · neto ${totalesPorMoneda(filas, 'neto')}` : ''}${suma('saldo') ? ` · saldo pendiente <b>${totalesPorMoneda(filas, 'saldo')}</b>` : ''}</p>
+      <p class="nota">${filas.length} venta${filas.length === 1 ? '' : 's'} · ${n2.format(suma('cantidad'))} ${t.unidad.toLowerCase()}${kg ? ` · ${fmt.kg(kg)}` : ''} · <b>${totalesPorMoneda(filas, 'total')}</b>${unaMoneda && kg ? ` · precio promedio ${dinero(suma('total') / kg, filas[0].moneda)}/kg` : ''}${suma('saldo') ? ` · saldo pendiente <b>${totalesPorMoneda(filas, 'saldo')}</b>` : ''}</p>
       <div class="tabla-scroll"><table>
         <thead><tr><th>Fecha</th><th>Cliente</th><th>${t.producto ? 'Producto' : t.presentacion ? 'Presentación / calidad' : 'Calidad / granja'}</th><th class="num">${t.unidad}</th><th class="num">Kg ${conMerma ? 'netos' : ''}</th><th class="num">Precio prom.</th><th class="num">Total</th><th>Pago</th><th>Capturó</th><th></th></tr></thead>
         <tbody>${filas.map((v) => `
           <tr class="${Number(v.saldo) > 0 ? 'fila-alerta' : ''}">
             <td>${fmt.fecha(v.fecha)}${v.folio ? `<small>Folio ${esc(v.folio)}</small>` : ''}${v.folio_externo ? `<small>Cliente ${esc(v.folio_externo)}</small>` : ''}</td>
-            <td>${esc(v.cliente)}<small>${esc([v.rfc, v.destino].filter(Boolean).join(' · '))}</small></td>
+            <td>${esc(v.cliente)}<small>${esc([v.rfc, v.destino].filter(Boolean).join(' · '))}</small>${v.aumento_centavos_kg != null ? `<small>Aumento al destino: ${n2.format(v.aumento_centavos_kg)} ¢/kg</small>` : ''}</td>
             <td>${describe(v)}<small>${esc(v.granjas || '')}</small></td>
             <td class="num">${n2.format(v.cantidad)}${v.peso_promedio && !t.producto ? `<small>${n2.format(v.peso_promedio)} kg prom.</small>` : ''}${Number(v.muertos) ? `<small class="dif-menos">${v.muertos} muertos</small>` : ''}</td>
             <td class="num">${Number(v.kg_netos) ? fmt.kg(v.kg_netos) : '—'}${Number(v.merma_kg) ? `<small>merma ${fmt.kg(v.merma_kg)}</small>` : ''}</td>
-            <td class="num">${v.precio_promedio_kg ? `${dinero(v.precio_promedio_kg, v.moneda)}/kg` : '—'}${Number(v.flete_total) ? `<small>neto ${fmt.precio(v.precio_neto_kg)}</small><small>flete ${fmt.dinero(v.flete_caja)}/caja</small>` : ''}</td>
-            <td class="num">${dinero(v.total, v.moneda)}${Number(v.descuento) ? `<small title="${esc(v.motivo_descuento || '')}">desc. ${dinero(v.descuento, v.moneda)}</small>` : ''}${Number(v.flete_total) ? `<small>neto ${dinero(v.neto, v.moneda)}</small>` : ''}${v.moneda === 'USD' && v.tipo_cambio ? `<small>TC ${n2.format(v.tipo_cambio)}</small>` : ''}</td>
+            <td class="num">${v.precio_promedio_kg ? `${dinero(v.precio_promedio_kg, v.moneda)}/kg` : '—'}</td>
+            <td class="num">${dinero(v.total, v.moneda)}${Number(v.descuento) ? `<small title="${esc(v.motivo_descuento || '')}">desc. ${dinero(v.descuento, v.moneda)}</small>` : ''}${v.moneda === 'USD' && v.tipo_cambio ? `<small>TC ${n2.format(v.tipo_cambio)}</small>` : ''}</td>
             <td>${v.tipo_pago === 'factura' ? `Factura ${esc(v.factura || '(sin número)')}<small>${esc(v.empresa_factura || '')}</small>` : 'Efectivo'}
               <small>${v.forma_pago === 'contado' ? 'De contado' : Number(v.saldo) > 0 ? `Saldo ${dinero(v.saldo, v.moneda)}${Number(v.anticipo) + Number(v.pagado) ? ` (pagado ${dinero(Number(v.anticipo) + Number(v.pagado), v.moneda)})` : ''}` : 'Crédito pagado'}</small></td>
             <td>${esc(v.capturado_por || '—')}<small>${esc(fmt.hora(v.capturado_en))}</small>${v.modificado_por ? `<small>Modificó ${esc(v.modificado_por)}</small>` : ''}</td>
@@ -522,7 +545,7 @@ async function historial(zona, especie, filtros, sigueVivo, alEditar) {
           <tbody>${rs.map((r) => `<tr>${t.producto ? `<td>${esc(r.producto || '—')}</td>` : ''}<td>${esc(r.granja || '—')}</td>${t.presentacion ? `<td>${esc(r.presentacion || '—')}</td>` : ''}${t.calidad ? `<td>${esc(r.calidad || '—')}</td>` : ''}
             <td class="num">${n2.format(r.cantidad)}${r.unidad ? ` ${esc(r.unidad)}` : ''}</td><td class="num">${Number(r.kg_brutos) ? fmt.kg(r.kg_brutos) : '—'}${r.peso_promedio && !t.producto ? `<small>${n2.format(r.peso_promedio)} kg prom.</small>` : ''}</td>
             ${conMerma ? `<td class="num">${fmt.kg(r.merma_kg)}</td><td class="num">${fmt.kg(r.kg_netos)}</td>` : ''}
-            <td class="num">${dinero(r.precio_total_kg, v.moneda)}/${r.precio_por === 'unidad' ? esc(r.unidad || (t.presentacion ? 'caja' : 'unidad')) : 'kg'}${Number(r.flete_importe) && r.precio_por !== 'unidad' ? `<small>− flete ${fmt.dinero(r.flete_caja)}/caja (${fmt.dinero(r.flete_importe)}) = neto ${fmt.precio(r.precio_neto_kg)}</small>` : ''}</td><td class="num">${dinero(r.importe, v.moneda)}</td></tr>`).join('')}</tbody>
+            <td class="num">${dinero(r.precio_total_kg, v.moneda)}/${r.precio_por === 'unidad' ? esc(r.unidad || (t.presentacion ? 'caja' : 'unidad')) : 'kg'}</td><td class="num">${dinero(r.importe, v.moneda)}</td></tr>`).join('')}</tbody>
         </table>${Number(v.pagado) ? `<p class="nota">Pagos aplicados: ${dinero(v.pagado, v.moneda)}${Number(v.anticipo) ? ` · anticipo ${dinero(v.anticipo, v.moneda)}` : ''}. El detalle está en Cobranza y saldos.</p>` : ''}${v.motivo_descuento ? `<p class="nota">Descuento: ${esc(v.motivo_descuento)}</p>` : ''}${v.notas ? `<p class="nota">${esc(v.notas)}</p>` : ''}`;
       } catch (e) { celda.innerHTML = `<span class="caja-error">${esc(e.message)}</span>`; }
     });
