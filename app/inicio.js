@@ -1,27 +1,35 @@
 // Portada: avisos que necesitan atención en todas las áreas construidas.
 import { api } from './api.js';
 import { esc, fmt, hoy, cargando, errorEn } from './ui.js';
-import { sesion } from './sesion.js';
+import { sesion, TIPOS_VENTA } from './sesion.js';
 import { alertasContratos } from './contratos.js';
+
+const NOMBRES_VENTA = { huevo: 'huevo', cerdo: 'cerdo', ganado: 'ganado', borrego: 'borregos', berries: 'berries', general: 'productos generales' };
 
 export function pantallaInicio(cont) {
   let vivo = true;
+  // Avisos: permiso aparte; dentro, cada aviso solo si también puede ver su módulo.
+  const verAvisos = sesion.puedeVer('avisos');
+  const verPlanta = sesion.puedeVer('planta');
+  const tiposVenta = TIPOS_VENTA.filter((t) => sesion.puedeVer(`ventas_${t}`));
   cont.innerHTML = `
     <h1>Hola, ${esc(sesion.perfil.nombre)}</h1>
-    <h2>Avisos</h2>
-    <div id="avisos-inicio"></div>
+    ${verAvisos ? '<h2>Avisos</h2><div id="avisos-inicio"></div>' : ''}
     <h2>Módulos</h2>
     <div class="accesos">
-      <a class="tarjeta acceso" href="#/planta/resumen"><b>Planta de alimentos</b><span>Capacidad, existencias y llegadas de materia prima</span></a>
+      ${verPlanta ? '<a class="tarjeta acceso" href="#/planta/resumen"><b>Planta de alimentos</b><span>Capacidad, existencias y llegadas de materia prima</span></a>' : ''}
       ${sesion.puedeCapturar('planta') ? '<a class="tarjeta acceso" href="#/planta/llegadas"><b>Registrar llegada</b><span>Captura una descarga de materia prima</span></a>' : ''}
-      <a class="tarjeta acceso" href="#/ventas/huevo"><b>Ventas</b><span>Huevo, cerdo, ganado, borregos, berries y generales; cobranza</span></a>
+      ${tiposVenta.map((t) => `<a class="tarjeta acceso" href="#/ventas/${t}"><b>Ventas de ${NOMBRES_VENTA[t]}</b><span>${sesion.puedeCapturar(`ventas_${t}`) ? 'Registrar y consultar' : 'Consultar'}</span></a>`).join('')}
+      ${sesion.puedeVer('cobranza') ? '<a class="tarjeta acceso" href="#/ventas/cobranza"><b>Cobranza y saldos</b><span>Pagos de clientes y depósitos por cuenta</span></a>' : ''}
       ${sesion.esAdmin() ? '<a class="tarjeta acceso" href="#/usuarios"><b>Usuarios</b><span>Altas, roles y permisos</span></a>' : ''}
     </div>`;
   const zona = cont.querySelector('#avisos-inicio');
+  if (!verAvisos) return () => { vivo = false; };
   cargando(zona);
   (async () => {
     try {
-      const [cap, exis, cob, contr, sinPesada, catalogo, catFormulas, llegPend, saldos] = await Promise.all([api.capacidad(), api.existencias(), api.cobertura(), api.contratos({ soloVigentes: true }), api.ordenes({ pendientesPesada: true, hasta: hoy(-1) }), sesion.esAdmin() ? api.materiasCatalogo() : [], sesion.esAdmin() ? api.formulasCatalogo() : [], api.llegadas({ pendientes: true, desde: hoy(-90) }), api.saldosClientes().catch(() => [])]);
+      const P = (cond, f) => (cond ? f().catch(() => []) : Promise.resolve([]));
+      const [cap, exis, cob, contr, sinPesada, catalogo, catFormulas, llegPend, saldos] = await Promise.all([P(verPlanta, api.capacidad), P(verPlanta, api.existencias), P(verPlanta, api.cobertura), P(verPlanta, () => api.contratos({ soloVigentes: true })), P(verPlanta, () => api.ordenes({ pendientesPesada: true, hasta: hoy(-1) })), P(sesion.esAdmin(), api.materiasCatalogo), P(sesion.esAdmin(), api.formulasCatalogo), P(verPlanta, () => api.llegadas({ pendientes: true, desde: hoy(-90) })), P(sesion.puedeVer('cobranza'), api.saldosClientes)]);
       if (!vivo) return;
       const avisos = [
         ...cap.filter((g) => Number(g.ocupacion_pct) >= 90)

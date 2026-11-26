@@ -224,3 +224,7 @@ td.notas-celda { white-space: normal; min-width: 200px; color: var(--texto-suave
 #form-venta .tabla-captura input[name=presentacion] { min-width: 150px; }
 #form-venta .tabla-captura select[name=producto] { min-width: 200px; }
 #form-venta .tabla-captura select[name=precio_por] { min-width: 100px; }
+.permisos { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+.grupo-permisos { display: flex; flex-direction: column; gap: 6px; }
+.formulario label.permiso, label.permiso { display: flex; flex-direction: row; justify-content: space-between; align-items: center; gap: 8px; font-weight: normal; text-align: left; }
+.permiso select { width: auto; min-width: 130px; }

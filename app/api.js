@@ -29,7 +29,7 @@ export const api = {
   async miPerfil() { return (ok(await sb.rpc('mi_perfil')) || [])[0] || null; },
 
   // Catálogos
-  async modulos() { return ok(await sb.from('modulos').select('codigo,nombre,orden').order('orden')); },
+  async modulos() { return ok(await sb.from('modulos').select('codigo,nombre,orden,grupo,activo').eq('activo', true).order('orden')); },
   async granjas() {
     return ok(await sb.from('granjas').select('id,nombre,activa,superficie_ha,notas').order('nombre'));
   },
@@ -283,9 +283,9 @@ export const api = {
 
   // Usuarios (solo administrador)
   async usuarios() { return ok(await sb.rpc('listar_usuarios')); },
-  async guardarUsuario({ email, nombre, rol, modulos, activo }) {
+  async guardarUsuario({ email, nombre, rol, ver, capturar, activo }) {
     return ok(await sb.rpc('guardar_perfil', {
-      p_email: email, p_nombre: nombre, p_rol: rol, p_modulos: modulos, p_activo: activo,
+      p_email: email, p_nombre: nombre, p_rol: rol, p_ver: ver, p_capturar: capturar, p_activo: activo,
     }));
   },
 

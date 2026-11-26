@@ -55,8 +55,13 @@ Todo en español: tablas, columnas, interfaz y mensajes.
   administrador las revisa en Planta → Materias primas. Duplicados por `nombre_normalizado()` (sin acentos).
 - Fórmulas nuevas: `crear_formula()` (copia de otra o vacía, `revisada = false`). Una fórmula sin ingredientes toma
   los de su primera orden (`base_formula_vacia()` dentro de `guardar_orden()`). Revisión en Planta → Fórmulas.
-- Seguridad: RLS en todas las tablas con `aplicar_seguridad(tabla, modulo)`: leer = usuario activo,
-  capturar = permiso del módulo en `perfil_modulos`, borrar = administrador.
+- Seguridad: RLS en todas las tablas con `aplicar_seguridad(tabla, modulo)`: capturar = permiso del módulo en
+  `perfil_modulos`, borrar = administrador. Desde 0026 `perfil_modulos.nivel` = 'ver' | 'capturar'; `puede_ver(m)`
+  (admin y director ven todo) y `puede_capturar(m)`. Permisos: avisos, granjas, planta, ventas_<especie>, cobranza
+  ('ventas' quedó inactivo). Planta y sus catálogos se leen con `puede_ver('planta')`; ventas por especie (cobranza
+  ve todas); pagos con 'cobranza'. Catálogos generales (granjas, clientes, cuentas) los lee todo usuario activo.
+  En la página: `sesion.puedeVer/puedeCapturar`; menú, Inicio y pestañas de Ventas se filtran por permiso.
+  Al crear una tabla nueva de un módulo, su regla de lectura debe usar `puede_ver(modulo)`.
 - Catálogos cerrados (fórmulas, casetas, materias primas); nada de nombres libres en movimientos.
 
 ## Probar SQL localmente

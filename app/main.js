@@ -70,8 +70,17 @@ function pantallaSinPerfil() {
   document.getElementById('btn-salir').onclick = () => api.salir().then(() => pantallaEntrar());
 }
 
+// Qué módulos ve cada quien: los construidos según sus permisos; los de "próximamente" solo administrador y director.
+function permitido(m) {
+  if (m.soloAdmin) return sesion.esAdmin();
+  if (m.codigo === 'inicio') return true;
+  if (m.codigo === 'ventas') return sesion.veVentas();
+  if (!m.listo) return ['administrador', 'director'].includes(perfil.rol);
+  return sesion.puedeVer(m.codigo);
+}
+
 function pintarMarco() {
-  const visibles = MODULOS.filter((m) => !m.soloAdmin || perfil.rol === 'administrador');
+  const visibles = MODULOS.filter(permitido);
   const roles = { administrador: 'Administrador', director: 'Director', capturista: 'Capturista', encargado_granja: 'Encargado de granja', consulta: 'Consulta' };
   raiz.innerHTML = `
     <div class="marco">
@@ -104,7 +113,7 @@ function pintarMarco() {
 function navegar() {
   if (!perfil) return;
   const [codigo = 'inicio', seccion] = location.hash.replace(/^#\/?/, '').split('/');
-  const mod = MODULOS.find((m) => m.codigo === codigo && (!m.soloAdmin || sesion.esAdmin())) || MODULOS[0];
+  const mod = MODULOS.find((m) => m.codigo === codigo && permitido(m)) || MODULOS[0];
   document.querySelectorAll('#menu a').forEach((a) => a.classList.toggle('activo', a.dataset.modulo === mod.codigo));
   if (limpiarPantalla) { limpiarPantalla(); limpiarPantalla = null; }
   const cont = document.getElementById('contenido');

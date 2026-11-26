@@ -20,7 +20,7 @@ export function irACobrar(clienteId, moneda = 'MXN') {
 
 export function pantallaCobranza(cont, pestanas) {
   let vivo = true;
-  const puede = sesion.puedeCapturar('ventas');
+  const puede = sesion.puedeCapturar('cobranza');
   cont.innerHTML = `
     <h1>Ventas</h1>
     ${pestanas}
@@ -330,7 +330,7 @@ async function historialPagos(zona, filtros, sigueVivo, alEditar, alEliminar) {
     const filas = await api.pagos({ cliente: filtros.cliente.value || null, desde: filtros.desde.value, hasta: filtros.hasta.value });
     if (!sigueVivo()) return;
     if (!filas.length) { zona.innerHTML = '<p class="vacio">No hay pagos con ese filtro.</p>'; return; }
-    const puede = sesion.puedeCapturar('ventas');
+    const puede = sesion.puedeCapturar('cobranza');
     const porId = new Map(filas.map((p) => [String(p.id), p]));
     const total = (m) => filas.filter((p) => p.moneda === m).reduce((s, p) => s + Number(p.monto), 0);
     zona.innerHTML = `

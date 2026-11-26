@@ -51,9 +51,11 @@
     varias facturas por venta).
 30. Repite con `supabase/migrations/0025_cuentas_bancarias.sql` (cuenta de banco o caja donde se depositó cada cobro;
     depósitos por cuenta).
-31. Revisa en **Table Editor** que existan las tablas `granjas`, `materias_primas`, `formulas`.
+31. Repite con `supabase/migrations/0026_permisos_ver.sql` (permisos de ver y de capturar por módulo y por tipo de venta;
+    cada quien ve solo lo autorizado). Repetible.
+32. Revisa en **Table Editor** que existan las tablas `granjas`, `materias_primas`, `formulas`.
 
-Siempre en ese orden: 0001 → 0002 → seed → 0003 → 0004 → 0005 → 0006 → 0007 → 0008 → 0009 → 0010 → 0011 → 0012 → datos/0001 → 0013 → 0014 → datos/0002 → 0015 → 0016 → 0017 → 0018 → 0019 → 0020 → 0021 → 0022 → 0023 → 0024 → 0025.
+Siempre en ese orden: 0001 → 0002 → seed → 0003 → 0004 → 0005 → 0006 → 0007 → 0008 → 0009 → 0010 → 0011 → 0012 → datos/0001 → 0013 → 0014 → datos/0002 → 0015 → 0016 → 0017 → 0018 → 0019 → 0020 → 0021 → 0022 → 0023 → 0024 → 0025 → 0026.
 Si un archivo marca "already exists", ese archivo ya se había ejecutado: pasa al siguiente. Si una ejecución marca error, no sigas con la siguiente: copia el mensaje y compártelo.
 
 ## Qué queda cargado

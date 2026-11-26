@@ -27,22 +27,24 @@ const numero = (v) => (v === '' || v == null ? null : Number(v));
 const n2 = new Intl.NumberFormat('es-MX', { maximumFractionDigits: 2 });
 export const dinero = (v, moneda) => (moneda === 'USD' ? `US$${n2.format(Number(v) || 0)}` : fmt.dinero(v));
 
-export function pantallaVentas(cont, seccion = 'huevo') {
-  if (seccion !== 'cobranza' && !TIPOS[seccion]) seccion = 'huevo';
-  const pestanas = `<nav class="pestanas" aria-label="Tipo de venta">
-      ${Object.entries(TIPOS).map(([k, v]) => `<a href="#/ventas/${k}" class="${k === seccion ? 'activo' : ''}">${v.nombre}</a>`).join('')}
-      <a href="#/ventas/cobranza" class="${seccion === 'cobranza' ? 'activo' : ''}">Cobranza y saldos</a>
-    </nav>`;
+export function pantallaVentas(cont, seccion) {
+  // Solo las pestañas que el usuario tiene permiso de ver.
+  const permitidas = [...Object.keys(TIPOS).filter((k) => sesion.puedeVer(`ventas_${k}`)), ...(sesion.puedeVer('cobranza') ? ['cobranza'] : [])];
+  if (!permitidas.includes(seccion)) seccion = permitidas[0];
+  if (!seccion) { cont.innerHTML = '<h1>Ventas</h1><div class="caja caja-info">No tienes permiso para ver ventas. Pídelo al administrador.</div>'; return () => {}; }
+  const pestanas = permitidas.length > 1 ? `<nav class="pestanas" aria-label="Tipo de venta">
+      ${permitidas.map((k) => `<a href="#/ventas/${k}" class="${k === seccion ? 'activo' : ''}">${k === 'cobranza' ? 'Cobranza y saldos' : TIPOS[k].nombre}</a>`).join('')}
+    </nav>` : '';
   if (seccion === 'cobranza') return pantallaCobranza(cont, pestanas);
   const especie = seccion;
   const t = TIPOS[especie];
   let vivo = true;
-  const puede = sesion.puedeCapturar('ventas');
+  const puede = sesion.puedeCapturar(`ventas_${especie}`);
   cont.innerHTML = `
     <h1>Ventas</h1>
     ${pestanas}
     ${especie === 'general' ? '<p class="nota">Abono, gallina de desecho a rastro y cualquier otro producto que se venda. Si el producto no está en la lista, agrégalo desde el renglón.</p>' : ''}
-    ${puede ? '<div id="zona-venta"></div>' : '<div class="caja caja-info">Puedes consultar las ventas. Para capturarlas pide permiso de Ventas al administrador.</div>'}
+    ${puede ? '<div id="zona-venta"></div>' : '<div class="caja caja-info">Puedes consultar las ventas. Para capturarlas pide el permiso al administrador.</div>'}
     <h2>Historial de ventas ${especie === 'general' ? 'generales' : `de ${t.nombre.toLowerCase()}`}</h2>
     <form class="filtros" id="filtros-ventas">
       <label>Desde<input type="date" name="desde"></label>
@@ -556,7 +558,8 @@ async function historial(zona, especie, filtros, sigueVivo, alEditar) {
     const suma = (k) => filas.reduce((s, v) => s + Number(v[k] || 0), 0);
     const kg = suma('kg_netos');
     const unaMoneda = new Set(filas.map((v) => v.moneda || 'MXN')).size === 1;
-    const puede = sesion.puedeCapturar('ventas');
+    const puede = sesion.puedeCapturar(`ventas_${especie}`);
+    const cobra = sesion.puedeCapturar('cobranza');
     const porId = new Map(filas.map((v) => [String(v.id), v]));
     const describe = (v) => (t.producto ? esc(v.productos || '—') : t.presentacion ? esc([v.presentaciones, v.calidades].filter(Boolean).join(' · ') || '—') : esc(v.calidades || '—'));
     zona.innerHTML = `
@@ -575,7 +578,7 @@ async function historial(zona, especie, filtros, sigueVivo, alEditar) {
             <td>${v.tipo_pago === 'factura' ? `${Number(v.num_facturas) > 1 ? 'Facturas' : 'Factura'} ${esc(v.factura || '(sin número)')}<small>${esc(Number(v.num_facturas) > 1 ? v.facturas : v.empresa_factura || '')}</small>${v.facturado != null && Math.abs(Number(v.facturado) - Number(v.total)) > 0.5 ? `<small class="dif-menos">facturado ${dinero(v.facturado, v.moneda)}</small>` : ''}` : 'Efectivo'}
               ${v.cuenta ? `<small>Depósito: ${esc(v.cuenta)}</small>` : ''}<small>${v.forma_pago === 'contado' ? 'De contado' : Number(v.saldo) > 0 ? `Saldo ${dinero(v.saldo, v.moneda)}${Number(v.anticipo) + Number(v.pagado) ? ` (pagado ${dinero(Number(v.anticipo) + Number(v.pagado), v.moneda)})` : ''}` : 'Crédito pagado'}</small></td>
             <td>${esc(v.capturado_por || '—')}<small>${esc(fmt.hora(v.capturado_en))}</small>${v.modificado_por ? `<small>Modificó ${esc(v.modificado_por)}</small>` : ''}</td>
-            <td class="acciones"><button type="button" class="boton boton-chico" data-ver-venta="${v.id}" aria-expanded="false">Ver</button>${puede ? `<button type="button" class="boton boton-chico" data-editar-venta="${v.id}">Editar</button>` : ''}${puede && Number(v.saldo) > 0 ? `<button type="button" class="boton boton-chico" data-cobrar="${v.id}">Registrar pago</button>` : ''}</td>
+            <td class="acciones"><button type="button" class="boton boton-chico" data-ver-venta="${v.id}" aria-expanded="false">Ver</button>${puede ? `<button type="button" class="boton boton-chico" data-editar-venta="${v.id}">Editar</button>` : ''}${cobra && Number(v.saldo) > 0 ? `<button type="button" class="boton boton-chico" data-cobrar="${v.id}">Registrar pago</button>` : ''}</td>
           </tr>`).join('')}</tbody>
       </table></div>`;
     zona.querySelector('tbody').addEventListener('click', async (ev) => {
