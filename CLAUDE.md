@@ -11,8 +11,11 @@ Todo en español: tablas, columnas, interfaz y mensajes.
 - Vercel para la página web. Sin compilación ni paquetes npm (la cuenta no permite instalar paquetes):
   `index.html` + módulos ES en `app/`; supabase-js se carga desde jsDelivr con versión fija en `app/api.js`.
   `.vercelignore` deja fuera supabase/, docs/ y scripts/. Las pantallas solo hablan con la base vía `app/api.js`.
-- Probar la página: Playwright (preinstalado) sirviendo el repo con `page.route` y reemplazando `app/api.js`
-  por una versión falsa con datos de ejemplo.
+- Probar la página: `tests/navegador/correr.sh` (Playwright preinstalado; sirve el repo con `page.route` y reemplaza
+  `app/api.js` por `tests/navegador/api_falsa.js`). Cada prueba revisa errores y scroll horizontal a 1280 y 390 px.
+  Al cambiar una pantalla, actualizar su prueba y la api falsa; todas deben quedar en "bien".
+- Ventas está dividido: `ventas.js` (pantalla y pestañas), `ventas_tipos.js` (config. por tipo y utilidades),
+  `ventas_formulario.js`, `ventas_historial.js`; cobranza en `cobranza.js`, cuentas en `cuentas.js`.
 - Cuenta de la empresa: sistemas@ramarierp.com (GitHub `ramari-erp`).
 
 ## Reglas de diseño
@@ -66,8 +69,10 @@ Todo en español: tablas, columnas, interfaz y mensajes.
 
 ## Probar SQL localmente
 PostgreSQL 16 está disponible en el contenedor. `supabase/tests/supabase_stub.sql` simula `auth.users`,
-`auth.uid()` y el rol `authenticated`. `supabase/tests/cargar_todo.sh` carga todo en el orden de Supabase (0001, 0002, seed, 0003…); luego correr `supabase/tests/test_planta.sql`.
-Al agregar una migración, agregarla también a `cargar_todo.sh` y a `docs/instalar-base-de-datos.md`.
+`auth.uid()` y el rol `authenticated`. `supabase/tests/cargar_todo.sh` carga todo en el orden de Supabase (0001, 0002, seed, 0003…).
+`supabase/tests/correr_sql.sh` corre todas las pruebas SQL (cada una en base nueva) y compara los errores esperados.
+Al agregar una migración: agregarla a `cargar_todo.sh` y a `docs/instalar-base-de-datos.md`, y correr
+`scripts/juntar_base.sh` (regenera `supabase/base_completa.sql`, la instalación en un solo archivo para proyectos nuevos).
 Croquis y capacidades de la planta: `docs/planta/`.
 Casetas y tolvas: `scripts/generar_casetas.py` genera `supabase/datos/0001_casetas_tolvas.sql` desde CAPACIDADES.xlsx
 (una hoja por granja; la capacidad de tolvas de la hoja es la de CADA tolva). Los archivos de `supabase/datos/` son repetibles.

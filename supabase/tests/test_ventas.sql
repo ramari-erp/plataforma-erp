@@ -2,7 +2,8 @@
 \set ON_ERROR_STOP 1
 insert into auth.users values ('00000000-0000-0000-0000-000000000005', 'ventas@ramarierp.com'), ('00000000-0000-0000-0000-000000000001', 'planta@ramarierp.com');
 insert into perfiles values ('00000000-0000-0000-0000-000000000005', 'Capturista ventas', 'capturista', true), ('00000000-0000-0000-0000-000000000001', 'Planta', 'capturista', true);
-insert into perfil_modulos values ('00000000-0000-0000-0000-000000000005', 'ventas'), ('00000000-0000-0000-0000-000000000001', 'planta');
+insert into perfil_modulos (perfil_id, modulo) select '00000000-0000-0000-0000-000000000005', m from unnest(array['ventas_huevo', 'ventas_cerdo', 'ventas_ganado', 'ventas_borrego', 'cobranza']) m;
+insert into perfil_modulos (perfil_id, modulo) values ('00000000-0000-0000-0000-000000000001', 'planta');
 grant usage on schema public to authenticated;
 grant select, insert, update, delete on all tables in schema public to authenticated;
 set role authenticated; set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000005';

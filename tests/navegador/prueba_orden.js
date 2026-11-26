@@ -1,0 +1,47 @@
+const { chromium } = require('playwright'); const fs = require('fs');
+const path = require('path'); const os = require('os');
+const S = __dirname, R = path.resolve(__dirname, '../..'), OUT = process.env.SALIDA || os.tmpdir();
+(async () => {
+  const b = await chromium.launch();
+  for (const [nombre, vp] of [['escritorio', { width: 1280, height: 900 }], ['celular', { width: 390, height: 844 }]]) {
+    const pg = await b.newPage({ viewport: vp }); const errores = [];
+    pg.on('pageerror', (e) => errores.push(e.message)); pg.on('console', (m) => m.type() === 'error' && errores.push(m.text()));
+    await pg.route('http://local/**', (r) => { let ruta = new URL(r.request().url()).pathname; if (ruta === '/') ruta = '/index.html';
+      const a = ruta === '/app/api.js' ? `${S}/api_falsa.js` : R + ruta;
+      r.fulfill({ body: fs.readFileSync(a), contentType: a.endsWith('.js') ? 'text/javascript' : a.endsWith('.css') ? 'text/css' : 'text/html' }); });
+    await pg.goto('http://local/'); await pg.fill('input[name=email]', 'a@b.c'); await pg.fill('input[name=password]', 'bien'); await pg.click('button[type=submit]');
+    await pg.waitForSelector('#avisos-inicio');
+    await pg.goto('http://local/#/planta/resumen'); await pg.waitForSelector('.kpi');
+    console.log(nombre, 'kpis:', await pg.$$eval('.kpi span', (l) => l.map((x) => x.textContent).join(' | ')));
+    await pg.goto('http://local/#/planta/produccion'); await pg.waitForSelector('#form-orden');
+    await pg.selectOption('select[name=formula]', '5'); await pg.waitForSelector('#filas-ing tr');
+    await pg.fill('input[name=kg_solicitados]', '30000'); console.log(nombre, 'granjas:', await pg.$$eval('#form-orden [name=granja] option', (o) => o.map((x) => x.textContent).join(', '))); console.log(nombre, 'área auto:', await pg.inputValue('#form-orden [name=area]')); await pg.selectOption('#form-orden [name=granja]', '5'); await pg.selectOption('#form-orden [name=area]', 'aves'); console.log(nombre, 'granjas aves:', await pg.$$eval('#form-orden [name=granja] option', (o) => o.map((x) => x.textContent).join(', '))); await pg.selectOption('#form-orden [name=area]', 'cerdos'); await pg.selectOption('#form-orden [name=granja]', '5');
+    console.log(nombre, 'base:', await pg.textContent('#resumen-orden'), '| campo base visible:', await pg.isVisible('#campo-base'));
+    await pg.fill('#filas-ing tr[data-id="1"] [name=kgt]', '760');
+    await pg.click('#filas-ing tr[data-id="7"] [data-quitar]');
+    console.log(nombre, 'alertas:', (await pg.textContent('#alertas-orden')).trim());
+    await pg.selectOption('select[name=nuevo_ing]', '7');
+    await pg.fill('input[name=nuevo_ing_kgt]', '5'); await pg.click('#btn-agregar-ing');
+    await pg.fill('#filas-ing tr[data-id="2"] [name=kgt]', '210');
+    await pg.click('#btn-agregar-extra'); await pg.selectOption('.fila-extra >> nth=0 >> select[name=extra_mp]', '5');
+    await pg.fill('.fila-extra >> nth=0 >> input[name=extra_cant]', '1');
+    await pg.click('#btn-agregar-extra'); await pg.selectOption('.fila-extra >> nth=1 >> select[name=extra_mp]', '6');
+    await pg.fill('.fila-extra >> nth=1 >> input[name=extra_cant]', '5'); await pg.selectOption('.fila-extra >> nth=1 >> select[name=extra_unidad]', 'kg_total');
+    await pg.fill('.fila-extra >> nth=1 >> input[name=extra_nota]', 'Brote respiratorio caseta 3');
+    console.log(nombre, 'resumen:', await pg.textContent('#resumen-orden'), '| etiquetas modificado:', await pg.$$eval('#filas-ing .etiqueta:not(.oculto)', (l) => l.length), '| campo base visible:', await pg.isVisible('#campo-base'));
+    console.log(nombre, 'alertas:', (await pg.textContent('#alertas-orden')).replace(/\s+/g, ' ').trim());
+    await pg.screenshot({ path: `${OUT}/${nombre}-orden.png`, fullPage: true });
+    await pg.check('input[name=actualizar_base]');
+    await pg.click('#form-orden button[type=submit]'); await pg.waitForTimeout(400);
+    console.log(nombre, 'enviada:', JSON.stringify(await pg.evaluate(() => window.__orden)));
+    await pg.click('[data-ver="1"]'); await pg.waitForSelector('.tabla-detalle');
+    await pg.screenshot({ path: `${OUT}/${nombre}-orden-historial.png`, fullPage: true });
+    await pg.click('[data-borrar]'); console.log(nombre, 'botón borrar:', await pg.textContent('[data-borrar]'));
+    await pg.click('[data-borrar]'); await pg.waitForTimeout(300);
+    console.log(nombre, 'eliminada:', await pg.evaluate(() => window.__eliminada), await pg.textContent('#historial-ordenes'));
+    const ancho = await pg.evaluate(() => document.documentElement.scrollWidth);
+    console.log(nombre, 'scroll horizontal:', ancho > vp.width ? `SÍ (${ancho})` : 'no', 'errores:', errores);
+    await pg.close();
+  }
+  await b.close();
+})();

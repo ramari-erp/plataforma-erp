@@ -1,0 +1,50 @@
+const { chromium } = require('playwright');
+const fs = require('fs');
+const path = require('path'); const os = require('os');
+const S = __dirname, R = path.resolve(__dirname, '../..'), OUT = process.env.SALIDA || os.tmpdir();
+(async () => {
+  const b = await chromium.launch();
+  for (const [nombre, vp] of [['escritorio', { width: 1280, height: 900 }], ['celular', { width: 390, height: 844 }]]) {
+    const pg = await b.newPage({ viewport: vp });
+    const errores = [];
+    pg.on('pageerror', (e) => errores.push(e.message));
+    pg.on('console', (m) => m.type() === 'error' && errores.push(m.text()));
+    await pg.route('http://local/**', (r) => {
+      let ruta = new URL(r.request().url()).pathname;
+      if (ruta === '/') ruta = '/index.html';
+      const archivo = ruta === '/app/api.js' ? `${S}/api_falsa.js` : R + ruta;
+      const tipo = archivo.endsWith('.js') ? 'text/javascript' : archivo.endsWith('.css') ? 'text/css' : 'text/html';
+      r.fulfill({ body: fs.readFileSync(archivo), contentType: tipo });
+    });
+    await pg.goto('http://local/');
+    await pg.fill('input[name=email]', 'admin@ramarierp.com');
+    await pg.fill('input[name=password]', 'mal'); await pg.click('button[type=submit]');
+    await pg.waitForTimeout(200);
+    console.log(nombre, 'error login:', await pg.textContent('#error-entrar'));
+    await pg.fill('input[name=password]', 'bien'); await pg.click('button[type=submit]');
+    await pg.waitForSelector('#avisos-inicio li');
+    console.log(nombre, 'avisos:', (await pg.$$eval('#avisos-inicio li', (l) => l.map((x) => x.textContent))).join(' | '));
+    await pg.screenshot({ path: `${OUT}/${nombre}-inicio.png`, fullPage: true });
+    await pg.goto('http://local/#/planta/resumen'); await pg.waitForSelector('.capacidad');
+    await pg.screenshot({ path: `${OUT}/${nombre}-resumen.png`, fullPage: true });
+    await pg.goto('http://local/#/planta/llegadas'); await pg.waitForSelector('#historial table');
+    await pg.selectOption('select[name=materia_prima_id]', '1');
+    await pg.selectOption('#form-llegada select[name=proveedor_id]', '__nuevo__');
+    await pg.fill('input[name=nuevo_proveedor]', 'nuevo prov'); await pg.click('#btn-guardar-prov');
+    await pg.fill('input[name=kg_bruto]', '45210'); await pg.fill('input[name=kg_tara]', '15000');
+    await pg.fill('input[name=precio_kg]', '5.12');
+    console.log(nombre, 'neto:', await pg.inputValue('input[name=kg_neto]'), 'total:', await pg.textContent('output[name=total]'));
+    await pg.screenshot({ path: `${OUT}/${nombre}-llegadas.png`, fullPage: true });
+    await pg.click('#form-llegada button[type=submit]'); await pg.waitForTimeout(300);
+    console.log(nombre, 'guardada:', JSON.stringify(await pg.evaluate(() => window.__guardada)));
+    console.log(nombre, 'filas historial:', await pg.$$eval('#historial tbody tr', (r) => r.length));
+    await pg.goto('http://local/#/planta/existencias'); await pg.waitForSelector('#seccion table');
+    await pg.goto('http://local/#/usuarios'); await pg.waitForSelector('#lista-usuarios table');
+    await pg.click('[data-editar="0"]');
+    await pg.goto('http://local/#/cerdos'); await pg.waitForSelector('.caja-info');
+    const ancho = await pg.evaluate(() => document.documentElement.scrollWidth);
+    console.log(nombre, 'scroll horizontal:', ancho > vp.width ? `SÍ (${ancho})` : 'no', 'errores:', errores);
+    await pg.close();
+  }
+  await b.close();
+})();

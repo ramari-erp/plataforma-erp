@@ -2,7 +2,7 @@
 import { api } from './api.js';
 import { esc, fmt, hoy, aviso, cargando, errorEn } from './ui.js';
 import { sesion } from './sesion.js';
-import { dinero } from './ventas.js';
+import { dinero } from './ventas_tipos.js';
 import { selectorCuenta } from './cuentas.js';
 
 const n2 = new Intl.NumberFormat('es-MX', { maximumFractionDigits: 2 });

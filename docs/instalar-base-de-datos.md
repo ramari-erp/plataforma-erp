@@ -1,5 +1,9 @@
 # Cómo instalar la base de datos en Supabase
 
+> **Proyecto nuevo (vacío):** basta con correr un solo archivo, `supabase/base_completa.sql`, que trae todos los pasos de
+> abajo ya juntos y en orden. **La base que ya está en uso no se reinstala:** ahí solo se corren las migraciones nuevas,
+> una por una, como siempre.
+
 1. Entra a supabase.com con la cuenta de la empresa y abre el proyecto **ramari-erp**.
 2. En el menú de la izquierda abre **SQL Editor** → **New query**.
 3. Copia todo el contenido de `supabase/migrations/0001_base.sql`, pégalo y presiona **Run**.

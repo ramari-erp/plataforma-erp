@@ -1,0 +1,77 @@
+const { chromium } = require('playwright'); const fs = require('fs');
+const path = require('path'); const os = require('os');
+const S = __dirname, R = path.resolve(__dirname, '../..'), OUT = process.env.SALIDA || os.tmpdir();
+const txt = async (pg, s) => (await pg.textContent(s)).replace(/\s+/g, ' ').trim();
+(async () => {
+  const b = await chromium.launch();
+  for (const [nombre, vp] of [['escritorio', { width: 1280, height: 900 }], ['celular', { width: 390, height: 844 }]]) {
+    const pg = await b.newPage({ viewport: vp }); const errores = [];
+    pg.on('pageerror', (e) => errores.push(e.message)); pg.on('console', (m) => m.type() === 'error' && errores.push(m.text()));
+    await pg.route('http://local/**', (r) => { let ruta = new URL(r.request().url()).pathname; if (ruta === '/') ruta = '/index.html';
+      const a = ruta === '/app/api.js' ? `${S}/api_falsa.js` : R + ruta;
+      r.fulfill({ body: fs.readFileSync(a), contentType: a.endsWith('.js') ? 'text/javascript' : a.endsWith('.css') ? 'text/css' : 'text/html' }); });
+    await pg.goto('http://local/'); await pg.fill('input[name=email]', 'a@b.c'); await pg.fill('input[name=password]', 'bien'); await pg.click('button[type=submit]');
+    await pg.waitForSelector('#avisos-inicio li');
+    console.log(nombre, 'inicio:', (await txt(pg, '#avisos-inicio')).match(/Ventas:[^.]*\./)?.[0]);
+    const r = '#renglones-venta tr';
+    // BERRIES
+    await pg.goto('http://local/#/ventas/berries'); await pg.waitForSelector('#form-venta [name=moneda]'); await pg.waitForSelector('#historial-ventas table');
+    await pg.waitForFunction(() => document.querySelectorAll('#form-venta [name=cliente] option').length > 2);
+    await pg.selectOption('#form-venta [name=cliente]', '3'); await pg.selectOption('[name=empresa]', '1');
+    await pg.selectOption('#form-venta [name=moneda]', 'USD'); await pg.fill('#form-venta [name=tipo_cambio]', '18.5');
+    await pg.fill('#form-venta [name=folio]', 'B-104'); await pg.fill('[name=folio_externo]', 'SX-90');
+    await pg.fill(`${r} >> nth=0 >> [name=presentacion]`, '12 x 18 oz'); await pg.fill(`${r} >> nth=0 >> [name=calidad]`, 'Jumbo');
+    await pg.fill(`${r} >> nth=0 >> [name=cantidad]`, '120');
+    console.log(nombre, 'kg automático:', await pg.inputValue(`${r} >> nth=0 >> [name=kg]`));
+    await pg.fill(`${r} >> nth=0 >> [name=merma]`, '4.4'); await pg.fill(`${r} >> nth=0 >> [name=precio]`, '7');
+    await pg.click('#btn-renglon-venta'); await pg.fill(`${r} >> nth=1 >> [name=presentacion]`, '6 oz'); await pg.fill(`${r} >> nth=1 >> [name=calidad]`, 'Código 1');
+    await pg.fill(`${r} >> nth=1 >> [name=cantidad]`, '200'); await pg.selectOption(`${r} >> nth=1 >> [name=precio_por]`, 'unidad'); await pg.fill(`${r} >> nth=1 >> [name=precio]`, '26.52');
+    console.log(nombre, 'berries totales:', await txt(pg, '#totales-venta'));
+    await pg.screenshot({ path: `${OUT}/${nombre}-venta-berries.png`, fullPage: true });
+    await pg.click('#form-venta button[type=submit]'); await pg.waitForTimeout(300);
+    console.log(nombre, 'berries enviada:', JSON.stringify(await pg.evaluate(() => window.__venta)));
+    await pg.click('[data-ver-venta="10"]'); await pg.waitForSelector('#historial-ventas .tabla-detalle');
+    console.log(nombre, 'detalle berries:', await txt(pg, '#historial-ventas .detalle'));
+    await pg.click('[data-editar-venta="10"]'); await pg.waitForSelector('form.editando'); await pg.waitForTimeout(200);
+    console.log(nombre, 'editar berries: moneda', await pg.inputValue('#form-venta [name=moneda]'), 'folio', await pg.inputValue('#form-venta [name=folio]'), 'merma', await pg.inputValue(`${r} >> nth=0 >> [name=merma]`), 'kg', await pg.inputValue(`${r} >> nth=0 >> [name=kg]`));
+    // GENERALES
+    await pg.goto('http://local/#/ventas/general'); await pg.waitForSelector('#form-venta [name=producto]'); await pg.waitForSelector('#historial-ventas table');
+    await pg.waitForFunction(() => document.querySelectorAll('#form-venta [name=cliente] option').length > 2);
+    await pg.selectOption('#form-venta [name=cliente]', '2'); await pg.selectOption('#form-venta [name=tipo_pago]', 'efectivo');
+    await pg.selectOption(`${r} >> nth=0 >> [name=producto]`, '1');
+    console.log(nombre, 'abono: precio sugerido', await pg.inputValue(`${r} >> nth=0 >> [name=precio]`), 'cobrar', await pg.inputValue(`${r} >> nth=0 >> [name=precio_por]`), 'unidad', await pg.textContent(`${r} >> nth=0 >> .unidad-prod`));
+    await pg.fill(`${r} >> nth=0 >> [name=cantidad]`, '12');
+    await pg.click('#btn-renglon-venta'); await pg.selectOption(`${r} >> nth=1 >> [name=producto]`, '__nuevo__');
+    await pg.fill('[name=np_nombre]', 'abon'); console.log(nombre, 'parecidos producto:', await txt(pg, '#np-parecidos'));
+    await pg.fill('[name=np_nombre]', 'Costales vacíos'); await pg.selectOption('[name=np_area]', 'planta'); await pg.click('#btn-np'); await pg.waitForTimeout(200);
+    console.log(nombre, 'producto nuevo:', JSON.stringify(await pg.evaluate(() => window.__producto)), await pg.$eval(`${r} >> nth=1 >> [name=producto]`, (s) => s.selectedOptions[0].textContent));
+    await pg.fill(`${r} >> nth=1 >> [name=cantidad]`, '300'); await pg.fill(`${r} >> nth=1 >> [name=precio]`, '5');
+    console.log(nombre, 'general totales:', await txt(pg, '#totales-venta'));
+    await pg.screenshot({ path: `${OUT}/${nombre}-venta-general.png`, fullPage: true });
+    await pg.click('#form-venta button[type=submit]'); await pg.waitForTimeout(300);
+    console.log(nombre, 'general enviada:', JSON.stringify(await pg.evaluate(() => window.__venta.r)));
+    // COBRANZA desde el historial de berries
+    await pg.goto('http://local/#/ventas/berries'); await pg.waitForSelector('[data-cobrar="10"]');
+    await pg.click('[data-cobrar="10"]'); await pg.waitForSelector('#form-pago [name=aplicar]');
+    console.log(nombre, 'cobranza preseleccion:', await pg.$eval('#form-pago [name=cliente]', (s) => s.selectedOptions[0].textContent), await pg.inputValue('#form-pago [name=moneda]'));
+    await pg.fill('#form-pago [name=monto]', '4000');
+    console.log(nombre, 'reparto FIFO:', await pg.$$eval('#form-pago [name=aplicar]', (x) => x.map((i) => i.dataset.venta + '=' + i.value).join(' ')), '|', await txt(pg, '#resumen-pago'));
+    await pg.fill('#form-pago [name=banco]', 'BBVA'); await pg.selectOption('#zona-cuenta-pago [name=cuenta_id]', '2');
+    await pg.click('#form-pago button[type=submit]'); await pg.waitForTimeout(300);
+    console.log(nombre, 'pago enviado:', JSON.stringify(await pg.evaluate(() => window.__pago)));
+    console.log(nombre, 'depositos:', (await pg.textContent('#depositos')).replace(/\s+/g, ' ').slice(0, 200));
+    console.log(nombre, 'saldos:', (await txt(pg, '#saldos-clientes')).slice(0, 200));
+    await pg.click('[data-estado="3"]'); await pg.waitForSelector('#estado-cuenta table');
+    console.log(nombre, 'estado de cuenta:', await txt(pg, '#estado-cuenta'));
+    await pg.screenshot({ path: `${OUT}/${nombre}-cobranza.png`, fullPage: true });
+    console.log(nombre, 'botones estado de cuenta:', await pg.$$eval('#estado-cuenta [data-eliminar-pago], #estado-cuenta [data-editar-pago]', (b) => b.length));
+    await pg.click('#historial-pagos [data-eliminar-pago="1"]'); console.log(nombre, 'confirmar:', await pg.textContent('#historial-pagos [data-eliminar-pago="1"]'));
+    await pg.click('#historial-pagos [data-eliminar-pago="1"]'); await pg.waitForTimeout(200); console.log(nombre, 'eliminado:', await pg.evaluate(() => window.__pagoEliminado));
+    await pg.click('#historial-pagos [data-editar-pago="1"]'); await pg.waitForSelector('#form-pago.editando'); await pg.waitForTimeout(300);
+    console.log(nombre, 'editar pago:', await pg.textContent('#titulo-pago'), await pg.$$eval('#form-pago [name=aplicar]', (x) => x.map((i) => i.dataset.venta + '=' + i.value + '/' + i.dataset.disponible).join(' ')));
+    const ancho = await pg.evaluate(() => document.documentElement.scrollWidth);
+    console.log(nombre, 'scroll horizontal:', ancho > vp.width ? `SÍ (${ancho})` : 'no', 'errores:', errores);
+    await pg.close();
+  }
+  await b.close();
+})();

@@ -1,0 +1,43 @@
+const { chromium } = require('playwright'); const fs = require('fs');
+const path = require('path'); const os = require('os');
+const S = __dirname, R = path.resolve(__dirname, '../..'), OUT = process.env.SALIDA || os.tmpdir();
+(async () => {
+  const b = await chromium.launch();
+  for (const [nombre, vp] of [['escritorio', { width: 1280, height: 900 }], ['celular', { width: 390, height: 844 }]]) {
+    const pg = await b.newPage({ viewport: vp }); const errores = [];
+    pg.on('pageerror', (e) => errores.push(e.message)); pg.on('console', (m) => m.type() === 'error' && errores.push(m.text()));
+    await pg.route('http://local/**', (r) => { let ruta = new URL(r.request().url()).pathname; if (ruta === '/') ruta = '/index.html';
+      const a = ruta === '/app/api.js' ? `${S}/api_falsa.js` : R + ruta;
+      r.fulfill({ body: fs.readFileSync(a), contentType: a.endsWith('.js') ? 'text/javascript' : a.endsWith('.css') ? 'text/css' : 'text/html' }); });
+    await pg.goto('http://local/'); await pg.fill('input[name=email]', 'a@b.c'); await pg.fill('input[name=password]', 'bien'); await pg.click('button[type=submit]');
+    await pg.waitForSelector('#avisos-inicio li');
+    console.log(nombre, 'aviso:', (await pg.$$eval('#avisos-inicio li', (l) => l.map((x) => x.textContent).filter((t) => t.includes('fórmula')))).join(''));
+    await pg.goto('http://local/#/planta/produccion'); await pg.waitForSelector('#form-orden');
+    await pg.selectOption('select[name=formula]', '__nueva_formula__'); await pg.waitForSelector('[name=nf_nombre]');
+    await pg.fill('[name=nf_nombre]', 'nx finaliz');
+    console.log(nombre, 'parecidas:', await pg.textContent('#nf-parecidas'));
+    await pg.fill('[name=nf_nombre]', 'NX verano'); await pg.selectOption('[name=nf_base]', '5'); await pg.click('#nf-guardar');
+    await pg.waitForSelector('#filas-ing tr');
+    console.log(nombre, 'copiada:', JSON.stringify(await pg.evaluate(() => window.__nuevaF)), '| elegida:', await pg.$eval('[name=formula]', (s) => s.selectedOptions[0].textContent), '| filas:', await pg.$$eval('#filas-ing tr', (r) => r.length), '| área:', await pg.inputValue('[name=area]'));
+    await pg.selectOption('select[name=formula]', '__nueva_formula__'); await pg.waitForSelector('[name=nf_nombre]');
+    await pg.fill('[name=nf_nombre]', 'prueba aves'); await pg.selectOption('[name=nf_especie]', 'aves'); await pg.press('[name=nf_nombre]', 'Enter');
+    await pg.waitForSelector('#nota-formula-nueva:not(.oculto)');
+    await pg.fill('[name=kg_solicitados]', '2000');
+    await pg.selectOption('select[name=nuevo_ing]', '1'); await pg.fill('[name=nuevo_ing_kgt]', '700'); await pg.click('#btn-agregar-ing');
+    await pg.selectOption('select[name=nuevo_ing]', '2'); await pg.fill('[name=nuevo_ing_kgt]', '300'); await pg.click('#btn-agregar-ing');
+    console.log(nombre, 'vacía → etiquetas modificado:', await pg.$$eval('#filas-ing .etiqueta:not(.oculto)', (l) => l.length), '| área:', await pg.inputValue('[name=area]'), '| resumen:', await pg.textContent('#resumen-orden'));
+    await pg.screenshot({ path: `${OUT}/${nombre}-formula-nueva.png`, fullPage: true });
+    await pg.click('#form-orden button[type=submit]'); await pg.waitForTimeout(300);
+    console.log(nombre, 'orden:', JSON.stringify(await pg.evaluate(() => { const o = window.__orden; return { formulaId: o.formulaId, ing: o.ingredientes, area: o.area }; })));
+    await pg.goto('http://local/#/planta/formulas'); await pg.waitForSelector('#lista-f table');
+    await pg.click('#lista-f tr[data-id="77"] [data-ver]'); await pg.waitForSelector('.tabla-detalle');
+    await pg.fill('#lista-f tr[data-id="77"] [name=etapa]', 'Desarrollo');
+    await pg.screenshot({ path: `${OUT}/${nombre}-formulas.png`, fullPage: true });
+    await pg.click('#lista-f tr[data-id="77"] [data-guardar]'); await pg.waitForTimeout(200);
+    console.log(nombre, 'revisada:', JSON.stringify(await pg.evaluate(() => window.__actF)));
+    const ancho = await pg.evaluate(() => document.documentElement.scrollWidth);
+    console.log(nombre, 'scroll horizontal:', ancho > vp.width ? `SÍ (${ancho})` : 'no', 'errores:', errores);
+    await pg.close();
+  }
+  await b.close();
+})();
