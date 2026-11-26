@@ -5,6 +5,7 @@ import { esc, fmt, hoy, aviso, cargando, errorEn } from './ui.js';
 import { sesion } from './sesion.js';
 import { normalizar } from './materias.js';
 import { pantallaCobranza, irACobrar } from './cobranza.js';
+import { selectorCuenta } from './cuentas.js';
 
 // calidad: 'catalogo' = lista cerrada; 'libre' = texto con sugerencias; null = sin calidad.
 const TIPOS = {
@@ -59,10 +60,10 @@ export function pantallaVentas(cont, seccion = 'huevo') {
 
   (async () => {
     try {
-      const [clientes, empresas, calidades, granjas, granjaAreas, previas, presentaciones, productos] = await Promise.all([
+      const [clientes, empresas, calidades, granjas, granjaAreas, previas, presentaciones, productos, cuentas] = await Promise.all([
         api.clientes(), api.empresasFactura(), api.calidadesVenta(especie), api.granjas(), api.granjaAreas(),
         api.ventas({ especie, desde: hoy(-365) }),
-        t.presentacion ? api.presentacionesVenta(especie) : [], t.producto ? api.productosVenta() : [],
+        t.presentacion ? api.presentacionesVenta(especie) : [], t.producto ? api.productosVenta() : [], api.cuentasBancarias().catch(() => []),
       ]);
       if (!vivo) return;
       filtros.cliente.insertAdjacentHTML('beforeend', clientes.map((c) => `<option value="${c.id}">${esc(c.nombre)}</option>`).join(''));
@@ -83,7 +84,7 @@ export function pantallaVentas(cont, seccion = 'huevo') {
           if (v.destino_colonia) destinos.get(k).colonias.add(v.destino_colonia);
         }
         editor = formulario(cont.querySelector('#zona-venta'), especie, {
-          clientes, destinos, empresas, calidades: calidades.map((c) => c.nombre), sugCalidad, presentaciones: sugPres, productos,
+          clientes, destinos, cuentas, empresas, calidades: calidades.map((c) => c.nombre), sugCalidad, presentaciones: sugPres, productos,
           granjas: granjasArea.length ? granjasArea : granjas.filter((g) => g.activa),
         }, pintar);
       }
@@ -98,7 +99,7 @@ export function pantallaVentas(cont, seccion = 'huevo') {
 
 // ---------- Formulario ----------
 
-function formulario(zona, especie, { clientes, destinos = new Map(), empresas, calidades, sugCalidad, presentaciones, productos, granjas }, alGuardar) {
+function formulario(zona, especie, { clientes, destinos = new Map(), cuentas = [], empresas, calidades, sugCalidad, presentaciones, productos, granjas }, alGuardar) {
   const t = TIPOS[especie];
   const NUEVO = '__nuevo__';
   const conMerma = Boolean(t.merma || t.mermaRenglon);
@@ -141,6 +142,7 @@ function formulario(zona, especie, { clientes, destinos = new Map(), empresas, c
         <label class="campo-factura">Razón social<select name="empresa"><option value="">Elige…</option>${empresas.map((e) => `<option value="${e.id}">${esc(e.nombre)}</option>`).join('')}</select></label>
         <label>Pago<select name="forma_pago"><option value="contado">De contado</option><option value="credito" ${t.credito ? 'selected' : ''}>Crédito / con anticipo</option></select></label>
         <label class="campo-credito oculto">Anticipo<input type="number" name="anticipo" min="0" step="0.01" inputmode="decimal" value="0"></label>
+        <div class="campo-cobro ancho2" id="zona-cuenta"></div>
         ${t.pesadaUnica ? '<label>Kg brutos de báscula<input type="number" name="kg_bascula" min="0" step="0.01" inputmode="decimal" placeholder="Toda la venta"><small class="ayuda">Una sola pesada de todas las cajas; se reparte por cajas</small></label>' : ''}
         ${t.merma ? `<label>Merma kg por caja<input type="number" name="merma_kg_caja" min="0" step="0.01" inputmode="decimal" value="${t.merma}"></label>` : ''}
         ${t.muertos ? '<label>Muertos<input type="number" name="muertos" min="0" step="1" inputmode="numeric" value="0"></label>' : ''}
@@ -230,8 +232,12 @@ function formulario(zona, especie, { clientes, destinos = new Map(), empresas, c
   form.nc_nombre.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); form.querySelector('#btn-nc').click(); } });
   pintarClientes();
 
+  // ---- Cuenta donde se depositó (contado o anticipo) ----
+  const cuenta = selectorCuenta(form.querySelector('#zona-cuenta'), cuentas, empresas);
+
   // ---- Factura / crédito / moneda ----
   const mostrarCampos = () => {
+    form.querySelector('#zona-cuenta').classList.toggle('oculto', form.forma_pago.value === 'credito' && !(numero(form.anticipo.value) > 0));
     form.querySelectorAll('.campo-factura').forEach((x) => x.classList.toggle('oculto', form.tipo_pago.value !== 'factura'));
     form.querySelectorAll('.campo-credito').forEach((x) => x.classList.toggle('oculto', form.forma_pago.value !== 'credito'));
     form.querySelectorAll('.campo-usd').forEach((x) => x.classList.toggle('oculto', moneda() !== 'USD'));
@@ -258,6 +264,7 @@ function formulario(zona, especie, { clientes, destinos = new Map(), empresas, c
     form.destino_estado.addEventListener('change', alCambiar);
   }
   form.forma_pago.addEventListener('change', mostrarCampos);
+  form.anticipo.addEventListener('input', mostrarCampos);
   if (t.moneda) form.moneda.addEventListener('change', mostrarCampos);
   mostrarCampos();
 
@@ -435,6 +442,7 @@ function formulario(zona, especie, { clientes, destinos = new Map(), empresas, c
     pintarClientes();
     cuerpo.innerHTML = renglon();
     cuerpoFact.innerHTML = filaFactura();
+    cuenta.fijar('');
     titulo.textContent = tituloNuevo;
     form.querySelector('button[type=submit]').textContent = 'Guardar venta';
     btnCancelar.classList.add('oculto'); btnEliminar.classList.add('oculto');
@@ -473,6 +481,7 @@ function formulario(zona, especie, { clientes, destinos = new Map(), empresas, c
       tipo_pago: form.tipo_pago.value, empresa_factura_id: form.tipo_pago.value === 'factura' ? form.empresa.value : '',
       facturas: form.tipo_pago.value === 'factura' ? leerFacturas() : [],
       kg_bascula: t.pesadaUnica ? form.kg_bascula.value : '',
+      cuenta_id: form.forma_pago.value === 'contado' || numero(form.anticipo.value) > 0 ? cuenta.valor() : '',
       forma_pago: form.forma_pago.value, anticipo: form.forma_pago.value === 'credito' ? numero(form.anticipo.value) || 0 : 0,
       flete_kg: 0, flete_caja: 0, merma_kg_caja: t.merma ? numero(form.merma_kg_caja.value) || 0 : 0,
       muertos: t.muertos ? numero(form.muertos.value) || 0 : 0, descuento: numero(form.descuento.value) || 0,
@@ -509,6 +518,7 @@ function formulario(zona, especie, { clientes, destinos = new Map(), empresas, c
       if (t.moneda) { form.moneda.value = v.moneda || 'MXN'; form.tipo_cambio.value = v.tipo_cambio ?? ''; }
       form.tipo_pago.value = v.tipo_pago; form.empresa.value = v.empresa_factura_id ? String(v.empresa_factura_id) : '';
       cuerpoFact.innerHTML = facturas.map((f) => filaFactura(f)).join('') || filaFactura();
+      cuenta.fijar(v.cuenta_id);
       if (t.pesadaUnica) form.kg_bascula.value = v.kg_bascula ?? (Number(v.kg_brutos) || '');
       form.forma_pago.value = v.forma_pago; form.anticipo.value = v.anticipo;
       if (t.merma) { form.merma_kg_caja.value = v.merma_kg_caja; mostrarDestino(); }
@@ -563,7 +573,7 @@ async function historial(zona, especie, filtros, sigueVivo, alEditar) {
             <td class="num">${v.precio_promedio_kg ? `${dinero(v.precio_promedio_kg, v.moneda)}/kg` : '—'}</td>
             <td class="num">${dinero(v.total, v.moneda)}${Number(v.descuento) ? `<small title="${esc(v.motivo_descuento || '')}">desc. ${dinero(v.descuento, v.moneda)}</small>` : ''}${v.moneda === 'USD' && v.tipo_cambio ? `<small>TC ${n2.format(v.tipo_cambio)}</small>` : ''}</td>
             <td>${v.tipo_pago === 'factura' ? `${Number(v.num_facturas) > 1 ? 'Facturas' : 'Factura'} ${esc(v.factura || '(sin número)')}<small>${esc(Number(v.num_facturas) > 1 ? v.facturas : v.empresa_factura || '')}</small>${v.facturado != null && Math.abs(Number(v.facturado) - Number(v.total)) > 0.5 ? `<small class="dif-menos">facturado ${dinero(v.facturado, v.moneda)}</small>` : ''}` : 'Efectivo'}
-              <small>${v.forma_pago === 'contado' ? 'De contado' : Number(v.saldo) > 0 ? `Saldo ${dinero(v.saldo, v.moneda)}${Number(v.anticipo) + Number(v.pagado) ? ` (pagado ${dinero(Number(v.anticipo) + Number(v.pagado), v.moneda)})` : ''}` : 'Crédito pagado'}</small></td>
+              ${v.cuenta ? `<small>Depósito: ${esc(v.cuenta)}</small>` : ''}<small>${v.forma_pago === 'contado' ? 'De contado' : Number(v.saldo) > 0 ? `Saldo ${dinero(v.saldo, v.moneda)}${Number(v.anticipo) + Number(v.pagado) ? ` (pagado ${dinero(Number(v.anticipo) + Number(v.pagado), v.moneda)})` : ''}` : 'Crédito pagado'}</small></td>
             <td>${esc(v.capturado_por || '—')}<small>${esc(fmt.hora(v.capturado_en))}</small>${v.modificado_por ? `<small>Modificó ${esc(v.modificado_por)}</small>` : ''}</td>
             <td class="acciones"><button type="button" class="boton boton-chico" data-ver-venta="${v.id}" aria-expanded="false">Ver</button>${puede ? `<button type="button" class="boton boton-chico" data-editar-venta="${v.id}">Editar</button>` : ''}${puede && Number(v.saldo) > 0 ? `<button type="button" class="boton boton-chico" data-cobrar="${v.id}">Registrar pago</button>` : ''}</td>
           </tr>`).join('')}</tbody>

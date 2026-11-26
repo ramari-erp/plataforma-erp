@@ -102,6 +102,19 @@ export const api = {
   async guardarVenta(venta, renglones, id = null) {
     return ok(await sb.rpc('guardar_venta', { p_venta: venta, p_renglones: renglones, p_id: id }));
   },
+  async cuentasBancarias() {
+    return ok(await sb.from('cuentas_bancarias').select('id,nombre,tipo,banco,numero,empresa_factura_id,moneda,activa').order('nombre'));
+  },
+  async crearCuentaBancaria(d) {
+    return ok(await sb.from('cuentas_bancarias').insert(d).select('id,nombre,tipo,banco,numero,empresa_factura_id,moneda,activa').single());
+  },
+  async depositos({ desde, hasta, cuenta } = {}) {
+    let q = sb.from('v_depositos').select('*').order('fecha', { ascending: false }).limit(1000);
+    if (desde) q = q.gte('fecha', desde);
+    if (hasta) q = q.lte('fecha', hasta);
+    if (cuenta === 'sin') q = q.is('cuenta_id', null); else if (cuenta) q = q.eq('cuenta_id', cuenta);
+    return ok(await q);
+  },
   async facturasVenta(ventaId) {
     return ok(await sb.from('venta_facturas').select('numero,empresa_factura_id,monto,fecha').eq('venta_id', ventaId).order('id'));
   },

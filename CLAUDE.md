@@ -48,6 +48,8 @@ Todo en español: tablas, columnas, interfaz y mensajes.
   del mismo cliente y moneda; lo no aplicado queda a favor. Saldo de venta = total − anticipo − pagado (`v_ventas`);
   por cliente y moneda en `v_saldos_clientes`. Pantalla Ventas → Cobranza y saldos (cobranza.js).
   Pagos: editar y eliminar desde Pagos recibidos o el estado de cuenta; eliminar lo puede quien captura ventas (0023).
+- Cuentas (0025): `cuentas_bancarias` (banco o caja, alta en línea desde Ventas/Cobranza, app/cuentas.js); `cuenta_id` en
+  `ventas` (contado/anticipo) y `pagos_cliente`. `v_depositos` = cobros por cuenta: base de la futura sección Bancos.
 - Almacenes de planta (`grupos_almacen`): Sorgo (zona roja 4,800 t + 10 t tolvas) y Maíz (zona amarilla 1,350 t + 10 t) separados (0023).
 - Materias primas nuevas: `crear_materia_prima()` (capturista de planta) las deja `revisada = false`; el
   administrador las revisa en Planta → Materias primas. Duplicados por `nombre_normalizado()` (sin acentos).

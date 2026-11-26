@@ -72,3 +72,13 @@ select guardar_venta(jsonb_build_object('especie', 'huevo', 'fecha', '2026-11-26
 select granja, calidad, cantidad, kg_brutos, merma_kg, kg_netos, importe from v_venta_renglones where venta_id = (select max(id) from ventas);
 select kg_bascula, kg_brutos, merma_kg, kg_netos, total, factura, num_facturas, facturas, facturado from v_ventas where id = (select max(id) from ventas);
 reset role;
+
+-- 0025: cuentas de depósito
+\set ON_ERROR_STOP 1
+set role authenticated; set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000005';
+insert into cuentas_bancarias (nombre, banco, numero, empresa_factura_id) values ('BBVA PECUARIA 1234', 'BBVA', '1234', 1);
+select guardar_venta('{"especie": "huevo", "fecha": "2026-11-26", "cliente_id": 2, "tipo_pago": "efectivo", "forma_pago": "contado", "merma_kg_caja": 2, "kg_bascula": 1100, "cuenta_id": 1}',
+  '[{"calidad": "Línea", "cantidad": 50, "precio_kg": 28}]') as contado;
+select registrar_pago('{"cliente_id": 3, "fecha": "2026-11-26", "monto": 1000, "cuenta_id": 2}', '[]') as pago;
+select origen, fecha, cliente, monto, moneda, cuenta, concepto from v_depositos order by fecha, origen;
+reset role;

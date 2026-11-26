@@ -3,6 +3,7 @@ import { api } from './api.js';
 import { esc, fmt, hoy, aviso, cargando, errorEn } from './ui.js';
 import { sesion } from './sesion.js';
 import { dinero } from './ventas.js';
+import { selectorCuenta } from './cuentas.js';
 
 const n2 = new Intl.NumberFormat('es-MX', { maximumFractionDigits: 2 });
 const numero = (v) => (v === '' || v == null ? null : Number(v));
@@ -34,10 +35,23 @@ export function pantallaCobranza(cont, pestanas) {
       <label>Hasta<input type="date" name="hasta"></label>
       <label>Cliente<select name="cliente"><option value="">Todos</option></select></label>
     </form>
-    <div id="historial-pagos"></div>`;
+    <div id="historial-pagos"></div>
+    <h2>Depósitos por cuenta</h2>
+    <p class="nota">Todo lo cobrado (ventas de contado, anticipos y pagos de clientes) según la cuenta donde se depositó. Será la base de la sección de Bancos.</p>
+    <form class="filtros" id="filtros-depositos">
+      <label>Desde<input type="date" name="desde"></label>
+      <label>Hasta<input type="date" name="hasta"></label>
+      <label>Cuenta<select name="cuenta"><option value="">Todas</option><option value="sin">Sin cuenta indicada</option></select></label>
+    </form>
+    <div id="depositos"></div>`;
   const zSaldos = cont.querySelector('#saldos-clientes');
   const zEstado = cont.querySelector('#estado-cuenta');
   const zPagos = cont.querySelector('#historial-pagos');
+  const zDep = cont.querySelector('#depositos');
+  const filtrosDep = cont.querySelector('#filtros-depositos');
+  filtrosDep.desde.value = hoy(-30); filtrosDep.hasta.value = hoy();
+  const pintarDepositos = () => depositos(zDep, filtrosDep, () => vivo);
+  filtrosDep.addEventListener('change', pintarDepositos);
   const filtros = cont.querySelector('#filtros-pagos');
   filtros.desde.value = hoy(-60);
   filtros.hasta.value = hoy();
@@ -111,21 +125,22 @@ export function pantallaCobranza(cont, pestanas) {
   };
 
   const pintarPagos = () => historialPagos(zPagos, filtros, () => vivo, (p) => editor?.editar(p), recargar);
-  function recargar() { pintarSaldos(); pintarPagos(); pintarEstado(); }
+  function recargar() { pintarSaldos(); pintarPagos(); pintarEstado(); pintarDepositos(); }
 
   (async () => {
     try {
-      const clientes = await api.clientes();
+      const [clientes, cuentas, empresas] = await Promise.all([api.clientes(), api.cuentasBancarias().catch(() => []), api.empresasFactura()]);
       if (!vivo) return;
+      filtrosDep.cuenta.insertAdjacentHTML('beforeend', cuentas.map((c) => `<option value="${c.id}">${esc(c.nombre)}</option>`).join(''));
       filtros.cliente.insertAdjacentHTML('beforeend', clientes.map((c) => `<option value="${c.id}">${esc(c.nombre)}</option>`).join(''));
-      if (puede) editor = formularioPago(cont.querySelector('#zona-pago'), clientes, recargar);
+      if (puede) editor = formularioPago(cont.querySelector('#zona-pago'), clientes, cuentas, empresas, recargar);
       if (preseleccion && editor) { editor.nuevo(preseleccion.cliente_id, preseleccion.moneda); }
       preseleccion = null;
     } catch (e) { aviso(e.message, 'error'); }
   })();
   filtros.addEventListener('change', pintarPagos);
   cargando(zSaldos); cargando(zPagos);
-  pintarSaldos(); pintarPagos();
+  pintarSaldos(); pintarPagos(); pintarDepositos();
   const soltar1 = api.enVivo('pagos_cliente', recargar);
   const soltar2 = api.enVivo('ventas', recargar);
   return () => { vivo = false; soltar1(); soltar2(); };
@@ -133,7 +148,7 @@ export function pantallaCobranza(cont, pestanas) {
 
 // ---------- Registrar pago ----------
 
-function formularioPago(zona, clientes, alGuardar) {
+function formularioPago(zona, clientes, cuentas, empresas, alGuardar) {
   zona.innerHTML = `
     <form class="tarjeta formulario margen-arriba" id="form-pago" autocomplete="off">
       <h2 id="titulo-pago">Registrar pago de cliente</h2>
@@ -144,7 +159,8 @@ function formularioPago(zona, clientes, alGuardar) {
         <label>Monto recibido<input type="number" name="monto" min="0.01" step="0.01" inputmode="decimal" required></label>
         <label class="campo-usd oculto">Tipo de cambio<input type="number" name="tipo_cambio" min="0" step="0.0001" inputmode="decimal" placeholder="Opcional"></label>
         <label>Forma<select name="forma"><option value="transferencia">Transferencia</option><option value="efectivo">Efectivo</option><option value="cheque">Cheque</option><option value="otro">Otro</option></select></label>
-        <label>Banco<input name="banco" maxlength="60" placeholder="BBVA, Banorte…"></label>
+        <div class="ancho2" id="zona-cuenta-pago"></div>
+        <label>Banco del cliente<input name="banco" maxlength="60" placeholder="Opcional"></label>
         <label>Referencia / vale<input name="referencia" maxlength="80"></label>
         <label>Factura<input name="factura" maxlength="60" placeholder="Opcional"></label>
         <label class="ancho2">Notas<input name="notas" maxlength="300"></label>
@@ -158,6 +174,7 @@ function formularioPago(zona, clientes, alGuardar) {
     </form>`;
   const form = zona.querySelector('#form-pago');
   const zVentas = form.querySelector('#ventas-pendientes');
+  const cuenta = selectorCuenta(form.querySelector('#zona-cuenta-pago'), cuentas, empresas);
   let pendientes = [];        // ventas del cliente con saldo disponible para este pago
   let manual = false;         // si se escribió a mano lo aplicado, ya no se reparte solo
   let editando = null;
@@ -224,7 +241,7 @@ function formularioPago(zona, clientes, alGuardar) {
   const btnCancelar = form.querySelector('#btn-cancelar-pago');
   const btnEliminar = form.querySelector('#btn-eliminar-pago');
   function limpiar() {
-    form.reset(); form.fecha.value = hoy();
+    form.reset(); form.fecha.value = hoy(); cuenta.fijar('');
     editando = null; previas = new Map(); manual = false;
     titulo.textContent = 'Registrar pago de cliente';
     form.querySelector('button[type=submit]').textContent = 'Guardar pago';
@@ -250,7 +267,7 @@ function formularioPago(zona, clientes, alGuardar) {
     const pago = {
       cliente_id: Number(form.cliente.value), fecha: form.fecha.value, monto, moneda: form.moneda.value,
       tipo_cambio: form.moneda.value === 'USD' ? form.tipo_cambio.value : '', forma: form.forma.value,
-      banco: form.banco.value.trim(), referencia: form.referencia.value.trim(), factura: form.factura.value.trim(), notas: form.notas.value.trim(),
+      cuenta_id: cuenta.valor(), banco: form.banco.value.trim(), referencia: form.referencia.value.trim(), factura: form.factura.value.trim(), notas: form.notas.value.trim(),
     };
     const boton = form.querySelector('button[type=submit]');
     boton.disabled = true;
@@ -276,7 +293,7 @@ function formularioPago(zona, clientes, alGuardar) {
         editando = p; previas = new Map(apl.map((a) => [a.venta_id, Number(a.monto)])); manual = true;
         form.fecha.value = p.fecha; form.cliente.value = String(p.cliente_id); form.moneda.value = p.moneda;
         form.monto.value = p.monto; form.tipo_cambio.value = p.tipo_cambio ?? ''; form.forma.value = p.forma;
-        form.banco.value = p.banco || ''; form.referencia.value = p.referencia || ''; form.factura.value = p.factura || ''; form.notas.value = p.notas || '';
+        cuenta.fijar(p.cuenta_id); form.banco.value = p.banco || ''; form.referencia.value = p.referencia || ''; form.factura.value = p.factura || ''; form.notas.value = p.notas || '';
         titulo.textContent = `Editar pago: ${p.cliente}, ${fmt.fecha(p.fecha)}`;
         form.querySelector('button[type=submit]').textContent = 'Guardar cambios';
         btnCancelar.classList.remove('oculto');
@@ -324,12 +341,37 @@ async function historialPagos(zona, filtros, sigueVivo, alEditar, alEliminar) {
           <td>${fmt.fecha(p.fecha)}</td>
           <td>${esc(p.cliente)}</td>
           <td class="num">${dinero(p.monto, p.moneda)}${p.moneda === 'USD' && p.tipo_cambio ? `<small>TC ${n2.format(p.tipo_cambio)}</small>` : ''}</td>
-          <td>${esc(p.forma)}<small>${esc([p.banco, p.referencia, p.factura ? `Factura ${p.factura}` : ''].filter(Boolean).join(' · '))}</small></td>
+          <td>${esc(p.forma)}${p.cuenta ? `<small>A: ${esc(p.cuenta)}</small>` : ''}<small>${esc([p.banco, p.referencia, p.factura ? `Factura ${p.factura}` : ''].filter(Boolean).join(' · '))}</small></td>
           <td>${esc(p.ventas || '—')}${Number(p.sin_aplicar) >= 0.01 ? `<small>${dinero(p.sin_aplicar, p.moneda)} sin aplicar</small>` : ''}${p.notas ? `<small>${esc(p.notas)}</small>` : ''}</td>
           <td>${esc(p.capturado_por || '—')}<small>${esc(fmt.hora(p.capturado_en))}</small></td>
           <td class="acciones">${puede ? botonesPago(p.id) : ''}</td>
         </tr>`).join('')}</tbody>
       </table></div>`;
     zona.querySelector('tbody').addEventListener('click', (ev) => accionPago(ev, porId, alEditar, alEliminar));
+  } catch (e) { if (sigueVivo()) errorEn(zona, e); }
+}
+
+// ---------- Depósitos por cuenta ----------
+
+async function depositos(zona, filtros, sigueVivo) {
+  try {
+    const filas = await api.depositos({ desde: filtros.desde.value, hasta: filtros.hasta.value, cuenta: filtros.cuenta.value || null });
+    if (!sigueVivo()) return;
+    if (!filas.length) { zona.innerHTML = '<p class="vacio">No hay cobros con ese filtro.</p>'; return; }
+    const grupos = new Map();
+    for (const d of filas) {
+      const k = `${d.cuenta || 'Sin cuenta indicada'}|${d.moneda}`;
+      const g = grupos.get(k) || { cuenta: d.cuenta || 'Sin cuenta indicada', sin: !d.cuenta, moneda: d.moneda, monto: 0, n: 0 };
+      g.monto += Number(d.monto); g.n += 1; grupos.set(k, g);
+    }
+    zona.innerHTML = `
+      <div class="kpis">${[...grupos.values()].map((g) => `<div class="kpi ${g.sin ? 'kpi-alerta' : ''}"><span>${esc(g.cuenta)}</span><b>${dinero(g.monto, g.moneda)}</b><small>${g.n} cobro${g.n === 1 ? '' : 's'}</small></div>`).join('')}</div>
+      <div class="tabla-scroll margen-arriba"><table>
+        <thead><tr><th>Fecha</th><th>Cuenta</th><th>Cliente</th><th>Concepto</th><th class="num">Monto</th></tr></thead>
+        <tbody>${filas.map((d) => `<tr class="${d.cuenta ? '' : 'fila-alerta'}">
+          <td>${fmt.fecha(d.fecha)}</td><td>${esc(d.cuenta || 'Sin indicar')}</td><td>${esc(d.cliente)}</td>
+          <td>${esc(d.concepto)}<small>${esc([d.especie ? ESPECIES[d.especie] : '', d.folio].filter(Boolean).join(' · '))}</small></td>
+          <td class="num">${dinero(d.monto, d.moneda)}</td></tr>`).join('')}</tbody>
+      </table></div>`;
   } catch (e) { if (sigueVivo()) errorEn(zona, e); }
 }
