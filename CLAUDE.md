@@ -38,6 +38,8 @@ Todo en español: tablas, columnas, interfaz y mensajes.
   Sin flete (0022: `flete_kg` y `flete_caja` quedan en 0; columnas neto/flete de las vistas solo por compatibilidad).
   Destino: `destino_colonia`, `destino_ciudad`, `destino_estado` (+ `destino` armado); `aumento_centavos_kg` = dato de
   referencia, no cambia precio ni total.
+  Pesada única (0024): `ventas.kg_bascula` se reparte entre renglones por cajas (último renglón = redondeo), en
+  `guardar_venta()`. Facturas: `venta_facturas` (número, razón social, monto); `ventas.factura` = números juntos.
   Calidades en `calidades_venta` (borrego pendiente: texto libre).
   Berries: `presentacion` (sugerencias en `presentaciones_venta` con kg por caja), `merma_kg` por renglón, moneda MXN/USD,
   folio y folio_externo. Generales: `producto_id` → `productos_venta` (catálogo que crece desde la captura).

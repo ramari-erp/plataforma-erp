@@ -102,6 +102,9 @@ export const api = {
   async guardarVenta(venta, renglones, id = null) {
     return ok(await sb.rpc('guardar_venta', { p_venta: venta, p_renglones: renglones, p_id: id }));
   },
+  async facturasVenta(ventaId) {
+    return ok(await sb.from('venta_facturas').select('numero,empresa_factura_id,monto,fecha').eq('venta_id', ventaId).order('id'));
+  },
   async eliminarVenta(id) {
     return ok(await sb.from('ventas').delete().eq('id', id));
   },

@@ -58,3 +58,17 @@ select guardar_venta('{"especie": "huevo", "fecha": "2026-11-24", "cliente_id": 
   '[{"calidad": "Línea", "cantidad": 100, "kg": 2250, "precio_kg": 28}]') as huevo;
 select destino, destino_colonia, destino_ciudad, destino_estado, aumento_centavos_kg, flete_total, total, neto, saldo, precio_promedio_kg from v_ventas where especie = 'huevo';
 reset role;
+
+-- 0024: huevo con una sola pesada (10,050 kg para 400 cajas de 2 granjas) y dos facturas
+\set ON_ERROR_STOP 1
+set role authenticated; set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000005';
+select guardar_venta(jsonb_build_object('especie', 'huevo', 'fecha', '2026-11-26', 'cliente_id', 3, 'tipo_pago', 'factura', 'empresa_factura_id', 1,
+  'forma_pago', 'credito', 'merma_kg_caja', 2, 'kg_bascula', 10050,
+  'facturas', jsonb_build_array(jsonb_build_object('numero', 'A-101', 'monto', 150000), jsonb_build_object('numero', 'B-55', 'empresa_factura_id', 2, 'monto', 126400))),
+  jsonb_build_array(
+    jsonb_build_object('granja_id', (select id from granjas where nombre = 'Paraíso'), 'calidad', 'Línea', 'cantidad', 300, 'precio_kg', 29),
+    jsonb_build_object('granja_id', (select id from granjas where nombre = 'Princesita'), 'calidad', 'Línea', 'cantidad', 70, 'precio_kg', 29),
+    jsonb_build_object('granja_id', (select id from granjas where nombre = 'Princesita'), 'calidad', 'Sucio', 'cantidad', 30, 'precio_kg', 22))) as v;
+select granja, calidad, cantidad, kg_brutos, merma_kg, kg_netos, importe from v_venta_renglones where venta_id = (select max(id) from ventas);
+select kg_bascula, kg_brutos, merma_kg, kg_netos, total, factura, num_facturas, facturas, facturado from v_ventas where id = (select max(id) from ventas);
+reset role;

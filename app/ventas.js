@@ -8,7 +8,7 @@ import { pantallaCobranza, irACobrar } from './cobranza.js';
 
 // calidad: 'catalogo' = lista cerrada; 'libre' = texto con sugerencias; null = sin calidad.
 const TIPOS = {
-  huevo:   { nombre: 'Huevo',     unidad: 'Cajas',    area: 'aves',     calidad: 'catalogo', obligaCalidad: true, destino: true, merma: 2 },
+  huevo:   { nombre: 'Huevo',     unidad: 'Cajas',    area: 'aves',     calidad: 'catalogo', obligaCalidad: true, destino: true, merma: 2, pesadaUnica: true },
   cerdo:   { nombre: 'Cerdo',     unidad: 'Cerdos',   area: 'cerdos',   calidad: 'catalogo', obligaCalidad: true, muertos: true },
   ganado:  { nombre: 'Ganado',    unidad: 'Cabezas',  area: 'ganado',   calidad: 'catalogo', obligaCalidad: true },
   borrego: { nombre: 'Borregos',  unidad: 'Cabezas',  area: 'borregos', calidad: 'libre', obligaCalidad: true },
@@ -139,17 +139,23 @@ function formulario(zona, especie, { clientes, destinos = new Map(), empresas, c
           <label class="campo-usd oculto">Tipo de cambio<input type="number" name="tipo_cambio" min="0" step="0.0001" inputmode="decimal" placeholder="Opcional"></label>` : ''}
         <label>Tipo de venta<select name="tipo_pago"><option value="factura">Con factura</option><option value="efectivo">Efectivo</option></select></label>
         <label class="campo-factura">Razón social<select name="empresa"><option value="">Elige…</option>${empresas.map((e) => `<option value="${e.id}">${esc(e.nombre)}</option>`).join('')}</select></label>
-        <label class="campo-factura">Número de factura<input name="factura" maxlength="60" placeholder="Si ya se emitió"></label>
         <label>Pago<select name="forma_pago"><option value="contado">De contado</option><option value="credito" ${t.credito ? 'selected' : ''}>Crédito / con anticipo</option></select></label>
         <label class="campo-credito oculto">Anticipo<input type="number" name="anticipo" min="0" step="0.01" inputmode="decimal" value="0"></label>
+        ${t.pesadaUnica ? '<label>Kg brutos de báscula<input type="number" name="kg_bascula" min="0" step="0.01" inputmode="decimal" placeholder="Toda la venta"><small class="ayuda">Una sola pesada de todas las cajas; se reparte por cajas</small></label>' : ''}
         ${t.merma ? `<label>Merma kg por caja<input type="number" name="merma_kg_caja" min="0" step="0.01" inputmode="decimal" value="${t.merma}"></label>` : ''}
         ${t.muertos ? '<label>Muertos<input type="number" name="muertos" min="0" step="1" inputmode="numeric" value="0"></label>' : ''}
+        <div class="ancho-total campo-factura">
+          <b>Facturas</b> <small class="ayuda">Una venta puede llevar varias facturas; el número se puede agregar después.</small>
+          <div class="tabla-scroll"><table class="tabla-captura"><thead><tr><th>Número</th><th>Razón social</th><th class="num">Monto (opcional)</th><th></th></tr></thead>
+            <tbody id="facturas-venta"></tbody></table></div>
+          <button type="button" class="boton boton-chico" id="btn-factura">+ Otra factura</button>
+        </div>
       </div>
 
       <h3>${t.merma ? 'Cajas por granja y calidad' : t.producto ? 'Productos' : 'Detalle'}</h3>
       <div class="tabla-scroll"><table class="tabla-captura">
         <thead><tr>${t.producto ? '<th>Producto</th>' : ''}<th>Granja</th>${t.presentacion ? '<th>Presentación</th>' : ''}${t.calidad ? '<th>Calidad</th>' : ''}
-          <th class="num">${t.unidad}</th><th class="num">Kg ${t.merma ? 'brutos (báscula)' : conMerma ? 'brutos' : t.producto ? '(opcional)' : 'totales'}</th>${t.producto ? '' : '<th class="num">Peso prom.</th>'}
+          <th class="num">${t.unidad}</th><th class="num">Kg ${t.pesadaUnica ? 'brutos (repartidos)' : t.merma ? 'brutos (báscula)' : conMerma ? 'brutos' : t.producto ? '(opcional)' : 'totales'}</th>${t.producto ? '' : '<th class="num">Peso prom.</th>'}
           ${conMerma ? '<th class="num">Merma kg</th><th class="num">Kg netos</th>' : ''}${t.precioPor ? '<th>Cobrar</th>' : ''}<th class="num">${precioLabel}</th><th class="num">Importe</th><th></th></tr></thead>
         <tbody id="renglones-venta"></tbody>
       </table></div>
@@ -255,6 +261,24 @@ function formulario(zona, especie, { clientes, destinos = new Map(), empresas, c
   if (t.moneda) form.moneda.addEventListener('change', mostrarCampos);
   mostrarCampos();
 
+  // ---- Facturas ----
+  const cuerpoFact = form.querySelector('#facturas-venta');
+  const filaFactura = (f = {}) => `<tr>
+      <td><input name="f_numero" maxlength="60" value="${esc(f.numero || '')}" placeholder="Si ya se emitió" aria-label="Número de factura"></td>
+      <td><select name="f_empresa" aria-label="Razón social de la factura"><option value="">La de la venta</option>${empresas.map((e) => `<option value="${e.id}" ${String(e.id) === String(f.empresa_factura_id ?? '') ? 'selected' : ''}>${esc(e.nombre)}</option>`).join('')}</select></td>
+      <td class="num"><input type="number" class="celda-num" name="f_monto" min="0" step="0.01" inputmode="decimal" value="${f.monto ?? ''}" aria-label="Monto de la factura"></td>
+      <td><button type="button" class="boton boton-chico" data-quitar-factura>Quitar</button></td></tr>`;
+  const leerFacturas = () => [...cuerpoFact.querySelectorAll('tr')].map((tr) => ({
+    numero: tr.querySelector('[name=f_numero]').value.trim(), empresa_factura_id: tr.querySelector('[name=f_empresa]').value,
+    monto: tr.querySelector('[name=f_monto]').value })).filter((f) => f.numero || f.monto);
+  form.querySelector('#btn-factura').addEventListener('click', () => { cuerpoFact.insertAdjacentHTML('beforeend', filaFactura()); });
+  cuerpoFact.addEventListener('click', (ev) => {
+    if (!ev.target.closest('[data-quitar-factura]')) return;
+    if (cuerpoFact.children.length > 1) ev.target.closest('tr').remove(); else cuerpoFact.innerHTML = filaFactura();
+    actualizar();
+  });
+  cuerpoFact.innerHTML = filaFactura();
+
   // ---- Renglones ----
   const unidadDe = (id) => productos.find((p) => String(p.id) === String(id))?.unidad || '';
   const renglon = (r = {}) => {
@@ -266,7 +290,7 @@ function formulario(zona, especie, { clientes, destinos = new Map(), empresas, c
       ${t.presentacion ? `<td><input name="presentacion" list="presentaciones-${especie}" maxlength="40" value="${esc(r.presentacion || '')}" aria-label="Presentación" placeholder="12 x 18 oz, granel…"></td>` : ''}
       ${t.calidad ? `<td>${listaCalidad(r.calidad)}</td>` : ''}
       <td class="num"><input type="number" class="celda-num" name="cantidad" min="0" step="any" inputmode="decimal" value="${r.cantidad ?? ''}" aria-label="${t.unidad}"><small class="unidad-prod">${esc(unidadDe(r.producto_id))}</small></td>
-      <td class="num"><input type="number" class="celda-num" name="kg" min="0" step="0.01" inputmode="decimal" value="${kg}" data-auto="${kg === '' ? '1' : '0'}" aria-label="Kg"></td>
+      <td class="num">${t.pesadaUnica ? '<span class="kg-repartido">—</span>' : `<input type="number" class="celda-num" name="kg" min="0" step="0.01" inputmode="decimal" value="${kg}" data-auto="${kg === '' ? '1' : '0'}" aria-label="Kg">`}</td>
       ${t.producto ? '' : '<td class="num prom">—</td>'}
       ${t.mermaRenglon ? `<td class="num"><input type="number" class="celda-num" name="merma" min="0" step="0.01" inputmode="decimal" value="${Number(r.merma_kg) ? r.merma_kg : ''}" aria-label="Merma kg"></td><td class="num netos">—</td>`
         : t.merma ? '<td class="num merma">—</td><td class="num netos">—</td>' : ''}
@@ -278,9 +302,21 @@ function formulario(zona, especie, { clientes, destinos = new Map(), empresas, c
   };
   const leer = () => {
     const merma = t.merma ? numero(form.merma_kg_caja.value) || 0 : 0;
-    const filas = [...cuerpo.querySelectorAll('tr')].map((tr) => {
+    // Pesada única: kg de báscula repartidos por cajas (igual que en la base: el último renglón se lleva el redondeo).
+    const trs = [...cuerpo.querySelectorAll('tr')];
+    const bascula = t.pesadaUnica ? numero(form.kg_bascula.value) : null;
+    const cajasTot = trs.reduce((x, tr) => x + (numero(tr.querySelector('[name=cantidad]').value) || 0), 0);
+    let acumulado = 0;
+    const ultimo = trs.map((tr) => numero(tr.querySelector('[name=cantidad]').value) || 0).findLastIndex((c) => c > 0);
+    const filas = trs.map((tr, i) => {
       const v = (n) => tr.querySelector(`[name=${n}]`)?.value ?? '';
-      const cantidad = numero(v('cantidad')) || 0, kg = numero(v('kg')), precio = numero(v('precio'));
+      const cantidad = numero(v('cantidad')) || 0, precio = numero(v('precio'));
+      let kg = numero(v('kg'));
+      if (t.pesadaUnica) {
+        kg = bascula && cajasTot && cantidad ? (i === ultimo ? Math.round((bascula - acumulado) * 100) / 100 : Math.round(bascula * cantidad / cajasTot * 100) / 100) : null;
+        acumulado += kg || 0;
+        tr.querySelector('.kg-repartido').textContent = kg != null ? fmt.kg(kg) : '—';
+      }
       const precio_por = t.precioPor ? v('precio_por') : 'kg';
       const mermaKg = t.mermaRenglon ? numero(v('merma')) || 0 : cantidad * merma;
       const netos = kg != null ? kg - mermaKg : null;
@@ -310,6 +346,7 @@ function formulario(zona, especie, { clientes, destinos = new Map(), empresas, c
       <div class="kpi"><span>${t.unidad}</span><b>${n2.format(cant)}</b><small>${cant && kg && !t.producto ? `peso promedio ${n2.format(kg / cant)} kg` : ''}</small></div>
       ${kg || !t.producto ? `<div class="kpi"><span>Kg ${conMerma ? 'netos' : 'totales'}</span><b>${fmt.kg(netos)}</b><small>${conMerma ? `${fmt.kg(kg)} brutos − ${fmt.kg(kg - netos)} merma` : ''}</small></div>` : ''}
       <div class="kpi"><span>Total ${t.muertos || t.merma ? 'de factura' : ''}</span><b>${dinero(total, m)}</b><small>${descuento ? `${dinero(importe, m)} − descuento ${dinero(descuento, m)}` : ''}${netos ? ` · ${dinero(total / netos, m)}/kg` : ''}</small></div>
+      ${((fs) => form.tipo_pago.value === 'factura' && fs.some((f) => numero(f.monto)) ? ((fac) => `<div class="kpi ${Math.abs(fac - total) > 0.5 ? 'kpi-alerta' : ''}"><span>Facturado</span><b>${dinero(fac, m)}</b><small>${fs.length} factura${fs.length === 1 ? '' : 's'}${Math.abs(fac - total) > 0.5 ? (fac < total ? ` · falta facturar ${dinero(total - fac, m)}` : ` · facturado de más ${dinero(fac - total, m)}`) : ''}</small></div>`)(fs.reduce((x, f) => x + (numero(f.monto) || 0), 0)) : '')(leerFacturas())}
       ${form.forma_pago.value === 'credito' ? `<div class="kpi"><span>Saldo</span><b>${dinero(saldo, m)}</b><small>anticipo ${dinero(anticipo, m)}</small></div>` : ''}`;
   };
   // Berries: kg = cajas × kg por caja de la presentación, mientras no se escriban los kg a mano.
@@ -397,6 +434,7 @@ function formulario(zona, especie, { clientes, destinos = new Map(), empresas, c
     editando = null;
     pintarClientes();
     cuerpo.innerHTML = renglon();
+    cuerpoFact.innerHTML = filaFactura();
     titulo.textContent = tituloNuevo;
     form.querySelector('button[type=submit]').textContent = 'Guardar venta';
     btnCancelar.classList.add('oculto'); btnEliminar.classList.add('oculto');
@@ -419,6 +457,8 @@ function formulario(zona, especie, { clientes, destinos = new Map(), empresas, c
     if (!usados.length) return aviso('Captura al menos un renglón.', 'error');
     if (t.producto && usados.some((f) => !f.producto_id)) return aviso('Elige el producto de cada renglón.', 'error');
     if (usados.some((f) => f.precio_kg == null)) return aviso('Captura el precio de cada renglón.', 'error');
+    if (t.pesadaUnica && !numero(form.kg_bascula.value)) return aviso('Captura los kg brutos de la báscula.', 'error');
+    if (t.pesadaUnica && usados.some((f) => !f.cantidad)) return aviso('Captura las cajas de cada renglón.', 'error');
     if (usados.some((f) => f.precio_por === 'kg' && !f.kg)) return aviso('Captura los kg de cada renglón que se cobra por kg.', 'error');
     if (usados.some((f) => f.precio_por === 'unidad' && !f.cantidad)) return aviso(`Captura la cantidad (${t.unidad.toLowerCase()}) de cada renglón que se cobra por ${t.producto ? 'unidad' : 'caja'}.`, 'error');
     if (t.obligaCalidad && usados.some((f) => !f.calidad)) return aviso('Captura la calidad de cada renglón.', 'error');
@@ -431,7 +471,8 @@ function formulario(zona, especie, { clientes, destinos = new Map(), empresas, c
       folio: form.folio.value.trim(), folio_externo: t.folioExterno ? form.folio_externo.value.trim() : '',
       moneda: moneda(), tipo_cambio: t.moneda && moneda() === 'USD' ? form.tipo_cambio.value : '',
       tipo_pago: form.tipo_pago.value, empresa_factura_id: form.tipo_pago.value === 'factura' ? form.empresa.value : '',
-      factura: form.tipo_pago.value === 'factura' ? form.factura.value.trim() : '',
+      facturas: form.tipo_pago.value === 'factura' ? leerFacturas() : [],
+      kg_bascula: t.pesadaUnica ? form.kg_bascula.value : '',
       forma_pago: form.forma_pago.value, anticipo: form.forma_pago.value === 'credito' ? numero(form.anticipo.value) || 0 : 0,
       flete_kg: 0, flete_caja: 0, merma_kg_caja: t.merma ? numero(form.merma_kg_caja.value) || 0 : 0,
       muertos: t.muertos ? numero(form.muertos.value) || 0 : 0, descuento: numero(form.descuento.value) || 0,
@@ -454,7 +495,7 @@ function formulario(zona, especie, { clientes, destinos = new Map(), empresas, c
 
   async function editar(v) {
     try {
-      const renglones = await api.renglonesVenta(v.id);
+      const [renglones, facturas] = await Promise.all([api.renglonesVenta(v.id), api.facturasVenta(v.id)]);
       editando = v;
       form.fecha.value = v.fecha;
       if (!clientes.some((c) => c.id === v.cliente_id)) clientes.push({ id: v.cliente_id, nombre: v.cliente, rfc: v.rfc });
@@ -467,7 +508,9 @@ function formulario(zona, especie, { clientes, destinos = new Map(), empresas, c
       if (t.folioExterno) form.folio_externo.value = v.folio_externo || '';
       if (t.moneda) { form.moneda.value = v.moneda || 'MXN'; form.tipo_cambio.value = v.tipo_cambio ?? ''; }
       form.tipo_pago.value = v.tipo_pago; form.empresa.value = v.empresa_factura_id ? String(v.empresa_factura_id) : '';
-      form.factura.value = v.factura || ''; form.forma_pago.value = v.forma_pago; form.anticipo.value = v.anticipo;
+      cuerpoFact.innerHTML = facturas.map((f) => filaFactura(f)).join('') || filaFactura();
+      if (t.pesadaUnica) form.kg_bascula.value = v.kg_bascula ?? (Number(v.kg_brutos) || '');
+      form.forma_pago.value = v.forma_pago; form.anticipo.value = v.anticipo;
       if (t.merma) { form.merma_kg_caja.value = v.merma_kg_caja; mostrarDestino(); }
       if (t.muertos) form.muertos.value = v.muertos;
       form.descuento.value = v.descuento; form.motivo_descuento.value = v.motivo_descuento || ''; form.notas.value = v.notas || '';
@@ -516,10 +559,10 @@ async function historial(zona, especie, filtros, sigueVivo, alEditar) {
             <td>${esc(v.cliente)}<small>${esc([v.rfc, v.destino].filter(Boolean).join(' · '))}</small>${v.aumento_centavos_kg != null ? `<small>Aumento al destino: ${n2.format(v.aumento_centavos_kg)} ¢/kg</small>` : ''}</td>
             <td>${describe(v)}<small>${esc(v.granjas || '')}</small></td>
             <td class="num">${n2.format(v.cantidad)}${v.peso_promedio && !t.producto ? `<small>${n2.format(v.peso_promedio)} kg prom.</small>` : ''}${Number(v.muertos) ? `<small class="dif-menos">${v.muertos} muertos</small>` : ''}</td>
-            <td class="num">${Number(v.kg_netos) ? fmt.kg(v.kg_netos) : '—'}${Number(v.merma_kg) ? `<small>merma ${fmt.kg(v.merma_kg)}</small>` : ''}</td>
+            <td class="num">${Number(v.kg_netos) ? fmt.kg(v.kg_netos) : '—'}${Number(v.merma_kg) ? `<small>brutos ${fmt.kg(v.kg_brutos)} − merma ${fmt.kg(v.merma_kg)}</small>` : ''}</td>
             <td class="num">${v.precio_promedio_kg ? `${dinero(v.precio_promedio_kg, v.moneda)}/kg` : '—'}</td>
             <td class="num">${dinero(v.total, v.moneda)}${Number(v.descuento) ? `<small title="${esc(v.motivo_descuento || '')}">desc. ${dinero(v.descuento, v.moneda)}</small>` : ''}${v.moneda === 'USD' && v.tipo_cambio ? `<small>TC ${n2.format(v.tipo_cambio)}</small>` : ''}</td>
-            <td>${v.tipo_pago === 'factura' ? `Factura ${esc(v.factura || '(sin número)')}<small>${esc(v.empresa_factura || '')}</small>` : 'Efectivo'}
+            <td>${v.tipo_pago === 'factura' ? `${Number(v.num_facturas) > 1 ? 'Facturas' : 'Factura'} ${esc(v.factura || '(sin número)')}<small>${esc(Number(v.num_facturas) > 1 ? v.facturas : v.empresa_factura || '')}</small>${v.facturado != null && Math.abs(Number(v.facturado) - Number(v.total)) > 0.5 ? `<small class="dif-menos">facturado ${dinero(v.facturado, v.moneda)}</small>` : ''}` : 'Efectivo'}
               <small>${v.forma_pago === 'contado' ? 'De contado' : Number(v.saldo) > 0 ? `Saldo ${dinero(v.saldo, v.moneda)}${Number(v.anticipo) + Number(v.pagado) ? ` (pagado ${dinero(Number(v.anticipo) + Number(v.pagado), v.moneda)})` : ''}` : 'Crédito pagado'}</small></td>
             <td>${esc(v.capturado_por || '—')}<small>${esc(fmt.hora(v.capturado_en))}</small>${v.modificado_por ? `<small>Modificó ${esc(v.modificado_por)}</small>` : ''}</td>
             <td class="acciones"><button type="button" class="boton boton-chico" data-ver-venta="${v.id}" aria-expanded="false">Ver</button>${puede ? `<button type="button" class="boton boton-chico" data-editar-venta="${v.id}">Editar</button>` : ''}${puede && Number(v.saldo) > 0 ? `<button type="button" class="boton boton-chico" data-cobrar="${v.id}">Registrar pago</button>` : ''}</td>
